@@ -101,7 +101,10 @@ class PowerAnalyzer:
         if not self.log_enabled:
             return
         
-        subdirectory = 'logs'
+        #Create a logs directory outside the src directory
+        parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        subdirectory = os.path.join(parent_directory, 'logs')
         if not os.path.exists(subdirectory):
             os.makedirs(subdirectory)
         
