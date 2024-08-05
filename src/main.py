@@ -14,10 +14,10 @@ def main():
 
     try:
         while True:
-            voltage, current, timestamp = check_readings(power_supply_controller)
+            voltage, current, power, timestamp = power_supply_controller.read_measurements()
             power_analyzer.add_entry(timestamp, voltage, current)
             total_energy = power_analyzer.calculate_energy()
-            print(f"{Fore.MAGENTA}Total energy: {total_energy:.3f} Wh{Style.RESET_ALL}")
+            print_readings(voltage, current, power, total_energy, timestamp)
             time.sleep(measurement_interval:=0.300)
 
     except (KeyboardInterrupt, SystemExit): 
