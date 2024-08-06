@@ -1,5 +1,8 @@
+#Builtin
 import os
 import datetime
+
+#Third party
 from colorama import Fore, Style, init
 
 class PowerAnalyzer:

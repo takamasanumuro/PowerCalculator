@@ -1,8 +1,13 @@
+#Builtins
 import time 
+import serial
+
+#Third party
 from colorama import Fore, Style, init
 
-from controllers import PowerSupplyController
-from analyzers import PowerAnalyzer
+#Locals
+from controllers import *
+from analyzers import *
 from utils import *
 
 def main():
