@@ -39,3 +39,5 @@ def print_readings(voltage, current, power, total_energy, timestamp):
 
 def init_colorama():
     init(autoreset=True)
+
+

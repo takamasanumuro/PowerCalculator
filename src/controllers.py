@@ -67,9 +67,9 @@ class YokogawaController:
         match = re.search(pattern, line)
 
         if not match:
-            return ValueError("Could not parse the readings")
+            raise ValueError("Could not parse the readings")
         
-        value = float(match.group(1))
+        value = match.group(1)
         unit = match.group(2)
         return (value, unit)
 
@@ -77,9 +77,50 @@ class YokogawaController:
     def read_measurements(self):
         self._ask_readings()
         line = self.serial.readline()
-        value, unit = self._parse_readings(line.decode())
+        try:
+            value, unit = self._parse_readings(line.decode())
+            unit = format_unit(value, unit)
+        except ValueError as e:
+            print(f"Error unpacking the readings: {e}")
+            return (None, None, None)
         timestamp_epoch_ms = int(time.time() * 1000)
         return (value, unit, timestamp_epoch_ms)
     
     def close(self):
         self.serial.close()
+
+
+
+def count_decimal_places(number: float) -> int:
+    return len(str(number).split(".")[1])
+
+
+def format_unit(value, raw_decoded_unit : str):
+
+    #mV = 3 decimal places
+    #V = 4 decimal places
+    #uA = 2 decimal places
+    #mA = 3 decimal places
+    #A = 4 decimal places
+
+    table = [
+        {"unit": "mV"},
+        {"unit": "V"},
+        {"unit": "uA"},
+        {"unit": "mA"},
+        {"unit": "A"},
+    ]
+
+    units = ["mVAC", "VAC", "mVDC", "VDC", "OHM", "kOHM", "MOHM", "nF", "uF", "mF", "C", "nADC", "uADC", "mADC", "ADC"]
+
+    pattern = r"({})".format("|".join(units))
+
+    match = re.search(pattern, raw_decoded_unit)
+    if not match:
+        return
+    
+    match_unit = match.group()
+    match_unit_trimmed = match_unit.rstrip()
+    return match_unit_trimmed
+
+    

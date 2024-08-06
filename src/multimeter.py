@@ -23,9 +23,11 @@ def main():
     try:
         while True:
             value, unit, timestamp = multimeter.read_measurements()
-            print(f"{Fore.GREEN}Value: {value:.2f} {unit}{Style.RESET_ALL}")
 
-            time.sleep(measurement_interval:=0.300)
+            if value is not None:
+                print(f"{Fore.GREEN}Value: {value} {unit}{Style.RESET_ALL}")
+
+            time.sleep(measurement_interval := 0.300)
 
     except (KeyboardInterrupt, SystemExit): 
         handle_exit()
