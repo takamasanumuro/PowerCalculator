@@ -40,4 +40,23 @@ def print_readings(voltage, current, power, total_energy, timestamp):
 def init_colorama():
     init(autoreset=True)
 
+def list_serial_ports_verbose() -> None:
+    from serial.tools.list_ports import comports
+    ports = comports()
+    for port in ports:
+        print(f"Device: {port.device}")
+        print(f"Name: {port.name}")
+        print(f"Description: {port.description}")
+        print(f"HWID: {port.hwid}")
+        print(f"VID: {port.vid}")
+        print(f"PID: {port.pid}")
+        print(f"Serial number: {port.serial_number}")
+        print(f"Location: {port.location}")
+        print(f"Manufacturer: {port.manufacturer}")
+        print(f"Product: {port.product}")
+        print(f"Interface: {port.interface}")
+        print("")
 
+def list_serial_ports() -> list[tuple[str]]:
+    from serial.tools.list_ports import comports
+    return [(port.device, port.description) for port in comports()]

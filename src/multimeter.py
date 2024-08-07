@@ -17,11 +17,18 @@ def handle_exit():
 
 def main():
 
-    MAX_DEVICES = 2
+    valid_ports = []
+    devices = list_serial_ports()
+    for device in devices:
+        if "MODEL 92015" in device[1]:
+            print(f"Found Yokogawa multimeter: {device[0]}")
+            valid_ports.append(device[0])
+            assert len(valid_ports) < 3, "Only two Yokogawa multimeters are supported"
+    
 
-    serial_ports = [serial.Serial(baudrate = 9600, timeout = 0.050) for _ in range(MAX_DEVICES)]
-    serial_ports[0].port = "COM3"
-    serial_ports[1].port = "COM4"
+    serial_ports = [serial.Serial(baudrate = 9600, timeout = 0.050) for _ in range(len(valid_ports))]
+    for port in serial_ports:
+        port.port = valid_ports[serial_ports.index(port)]
 
     serial_opener_threads = [SerialOpenerThread(serial) for serial in serial_ports]
     for opener in serial_opener_threads:
@@ -31,24 +38,25 @@ def main():
 
     try:
         while True:
-            values = [(None, None, None) for _ in range(MAX_DEVICES)]
-            output = ""
+            values = [(None, None, None) for _ in range(len(valid_ports))]
+            terminal_output = ""
             for multimeter in multimeters:
                 value, unit, timestamp = multimeter.read_measurements()
                 values[multimeters.index(multimeter)] = (value, unit, timestamp)
                 if value is None:
                     continue
-                output += f"{multimeter.serial.port}: {value} {unit}\t"
+                terminal_output += f"{multimeter.serial.port}: {value} {unit}\t"
 
-            if values[0][0] is not None and values[1][0] is not None:
+            if len(values) == 2 and values[0][0] is not None and values[1][0] is not None:
+                #Only measure power if both voltage and current are available
                 if re.search(r"\w?[AV]", values[0][1]) and re.search(r"\w?[AV]", values[1][1]):
                     voltage = float(values[0][0])
                     current = float(values[1][0])
                     power = voltage * current
-                    output += f"Power: {power:.2f}W"
+                    terminal_output += f"Power: {power:.4f}W"
 
-            if output:
-                print(output)
+            if terminal_output:
+                print(terminal_output)
             time.sleep(measurement_interval := 0.300)
 
     except (KeyboardInterrupt, SystemExit): 
