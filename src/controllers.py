@@ -75,13 +75,14 @@ class YokogawaController:
 
 
     def read_measurements(self):
+        if not self.serial.is_open:
+            return (None, None, None)
         self._ask_readings()
         line = self.serial.readline()
         try:
             value, unit = self._parse_readings(line.decode())
             unit = format_unit(value, unit)
         except ValueError as e:
-            print(f"Error unpacking the readings: {e}")
             return (None, None, None)
         timestamp_epoch_ms = int(time.time() * 1000)
         return (value, unit, timestamp_epoch_ms)
@@ -117,7 +118,7 @@ def format_unit(value, raw_decoded_unit : str):
 
     match = re.search(pattern, raw_decoded_unit)
     if not match:
-        return
+        return ""
     
     match_unit = match.group()
     match_unit_trimmed = match_unit.rstrip()
