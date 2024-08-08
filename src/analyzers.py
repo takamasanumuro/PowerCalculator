@@ -10,6 +10,7 @@ class PowerAnalyzer:
         self.entries = []
         self.log_enabled = False
         self.total_energy = 0.0
+        self.log_path = None
     
     def add_entry(self, timestamp, voltage, current):
         self.entries.append((timestamp, voltage, current))
@@ -45,17 +46,17 @@ class PowerAnalyzer:
         if not self.log_enabled:
             return
         
-        parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if self.log_path is None:
+            parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            subdirectory = os.path.join(parent_directory, 'logs')
+            if not os.path.exists(subdirectory):
+                os.makedirs(subdirectory) 
+            self.log_path = os.path.join(subdirectory, f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
 
-        subdirectory = os.path.join(parent_directory, 'logs')
-        if not os.path.exists(subdirectory):
-            os.makedirs(subdirectory)
+            with open(self.log_path, 'w') as file:
+                file.write("Timestamp(epoch_ms)\tVoltage(V)\tCurrent(A)\tTotal Energy(Wh)")
+
+        with open(self.log_path, 'a') as file:
+            timestamp, voltage, current = self.entries[-1]
+            file.write(f"{timestamp}\t{voltage:.2f}V\t{current:.3f}A\t{self.total_energy:.3f}Wh\n")
         
-        filename = os.path.join(subdirectory, f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
-        with open(filename, 'w') as file:
-            file.write("Timestamp(epoch_ms)\tVoltage(V)\tCurrent(A)\n")
-            for timestamp, voltage, current in self.entries:
-                file.write(f"{timestamp}\t{voltage:.2f}V\t{current:.3f}A\n")
-            file.write(f"Total energy: {self.total_energy:.3f} Wh\n")
-        
-        print(f"{Fore.CYAN}Data saved to {filename}{Style.RESET_ALL}")

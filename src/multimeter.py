@@ -36,6 +36,9 @@ def main():
     
     multimeters = [YokogawaController(serial) for serial in serial_ports]
 
+    power_analyzer = PowerAnalyzer()
+    power_analyzer.log_enabled = True
+
     try:
         while True:
             values = [(None, None, None) for _ in range(len(valid_ports))]
@@ -53,7 +56,10 @@ def main():
                     voltage = float(values[0][0])
                     current = float(values[1][0])
                     power = voltage * current
-                    terminal_output += f"Power: {power:.4f}W"
+                    power_analyzer.add_entry(values[0][2], voltage, current)
+                    total_energy = power_analyzer.calculate_energy()
+                    power_analyzer.save_data()
+                    terminal_output += f"Power: {power:.4f}W\t\tEnergy: {total_energy:.4f}Wh"
 
             if terminal_output:
                 print(terminal_output)
