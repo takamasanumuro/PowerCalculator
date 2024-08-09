@@ -14,6 +14,10 @@ class PowerAnalyzer:
     
     def add_entry(self, timestamp, voltage, current):
         self.entries.append((timestamp, voltage, current))
+
+    def reset(self):
+        self.entries = []
+        self.total_energy = 0.0
     
     def calculate_energy(self):
         

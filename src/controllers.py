@@ -90,6 +90,47 @@ class YokogawaController:
     def close(self):
         self.serial.close()
 
+class RelayController:
+    def __init__(self, serial_connection : serial.Serial):
+        self.serial = serial_connection
+    
+    def send_command(self, command):
+        self.serial.write(command.encode())
+        time.sleep(0.050)
+
+    def set_relay(self, relay_number : int, state : str):
+        assert state in ["ON", "OFF"], "Invalid state"
+        command = f"RELAY;{relay_number};{state}\r\n"
+        self.send_command(command)
+    
+    def close(self):
+        self.serial.close()
+
+class ChargeController():
+
+    MODES = ["monitor", "charge", "discharge"]
+
+    def __init__(self, relay_controller : RelayController) -> None:
+        self.mode = "monitor"
+        self.relay_controller = relay_controller
+        self.running = True
+
+    def set_mode(self, mode):
+        assert mode in self.MODES, f"Invalid mode: {mode}"
+
+        if mode == "monitor":
+            #disable_power_supply() #TODO
+            pass
+
+        if mode in ["charge", "monitor"]:
+            self.relay_controller.set_relay(relay_number = 1, state = "OFF")
+        elif mode == "discharge":
+            self.relay_controller.set_relay(relay_number = 1, state = "ON")
+        
+        self.mode = mode
+
+        
+
 
 
 def count_decimal_places(number: float) -> int:
