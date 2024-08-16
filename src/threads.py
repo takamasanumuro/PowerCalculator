@@ -4,6 +4,8 @@ from queue import Queue, Empty
 import time
 import serial
 
+#Third party
+import keyboard
 
 #Locals
 from controllers import *
@@ -64,3 +66,44 @@ class SerialOpenerThread(threading.Thread):
     
     def stop(self):
         self.running = False
+
+
+def handle_keyboard_input(charge_controller : ChargeController):
+    while True:
+        try:
+            if keyboard.is_pressed("ctrl+m"):
+                charge_controller.set_mode("monitor")
+                print("Mode set to monitor")
+                time.sleep(1.000)
+
+            if keyboard.is_pressed("ctrl+k"):
+                charge_controller.set_mode("cycle")
+                print("Mode set to cycle")
+                time.sleep(1.000)
+
+            if keyboard.is_pressed("ctrl+r"):
+                charge_controller.flip_relay()
+                print("Relay flipped")
+                time.sleep(1.000)
+
+            time.sleep(0.100)
+            
+        except KeyboardInterrupt:
+            exit()
+
+class KeyboardListenerThread(threading.Thread):
+    def __init__(self, charge_controller):
+        threading.Thread.__init__(self)
+        self.charge_controller = charge_controller
+        self.running = True
+        self.daemon = True
+
+    def run(self):
+        handle_keyboard_input(self.charge_controller)
+
+    def stop(self):
+        self.running = False
+
+    
+
+

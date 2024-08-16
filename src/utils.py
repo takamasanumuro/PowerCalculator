@@ -1,6 +1,7 @@
 #Builtins
 import time
 from serial import Serial
+from collections import namedtuple
 
 #Third party
 from colorama import init, Fore, Style
@@ -40,6 +41,8 @@ def print_readings(voltage, current, power, total_energy, timestamp):
 def init_colorama():
     init(autoreset=True)
 
+SerialPortInfo = namedtuple("SerialPortInfo", ["device", "description"])
+
 def list_serial_ports_verbose() -> None:
     from serial.tools.list_ports import comports
     ports = comports()
@@ -57,6 +60,15 @@ def list_serial_ports_verbose() -> None:
         print(f"Interface: {port.interface}")
         print("")
 
-def list_serial_ports() -> list[tuple[str]]:
+def list_serial_ports() -> list[SerialPortInfo]:
     from serial.tools.list_ports import comports
-    return [(port.device, port.description) for port in comports()]
+    return [SerialPortInfo(port.device, port.description) for port in comports()]
+
+def list_yokogawa_multimeters() -> list[str]:
+    devices = list_serial_ports()
+    valid_multimeter_ports = [device.device for device in devices if "MODEL 92015" in device.description]
+    assert len(valid_multimeter_ports) > 0, "No Yokogawa multimeters found"
+    assert len(valid_multimeter_ports) < 3, "Only two Yokogawa multimeters are supported"
+    
+    return valid_multimeter_ports
+

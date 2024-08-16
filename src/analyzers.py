@@ -1,5 +1,6 @@
 #Builtin
 import os
+import time
 import datetime
 
 #Third party
@@ -8,18 +9,14 @@ from colorama import Fore, Style, init
 class PowerAnalyzer:
     def __init__(self):
         self.entries = []
-        self.log_enabled = False
-        self.total_energy = 0.0
-        self.log_path = None
     
-    def add_entry(self, timestamp, voltage, current):
-        self.entries.append((timestamp, voltage, current))
+    def add_entry(self, voltage, current, timestamp):
+        self.entries.append((voltage, current, timestamp))
 
     def reset(self):
         self.entries = []
-        self.total_energy = 0.0
     
-    def calculate_energy(self):
+    def calculate_energy(self) -> float:
         
         if len(self.entries) < 2:
             return 0.0
@@ -27,8 +24,8 @@ class PowerAnalyzer:
         total_energy = 0.0
 
         for i in range(1, len(self.entries)):
-            previous_time, previous_voltage, previous_current = self.entries[i - 1]
-            current_time, current_voltage, current_current = self.entries[i]
+            previous_voltage, previous_current, previous_time = self.entries[i - 1]
+            current_voltage, current_current, current_time = self.entries[i]
 
             # Calculate the time difference in hours
             milliseconds_to_hours = 3600000
@@ -43,24 +40,58 @@ class PowerAnalyzer:
             energy = average_voltage * average_current * delta_time_hours
             total_energy += energy
         
-        self.total_energy = total_energy
         return total_energy
+
+class DataLogger:
+    def __init__(self, log_directories : list[str]):
+        assert log_directories, "No log directories provided"
+        self.log_directories : list[str] = log_directories
+        self.log_paths : dict = self._create_default_save_paths(self.log_directories)
+
+    def save_data(self, log_directory : str, data : str):
+        log_path = os.path.join(self.log_paths[log_directory], f"{log_directory}.log")
+        with open(log_path, 'a') as file:
+            file.write(data)
     
-    def save_data(self):
-        if not self.log_enabled:
-            return
-        
-        if self.log_path is None:
-            parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            subdirectory = os.path.join(parent_directory, 'logs')
-            if not os.path.exists(subdirectory):
-                os.makedirs(subdirectory) 
-            self.log_path = os.path.join(subdirectory, f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+    def add_save_paths(self, log_directories: list[str]):
+        for log_directory in log_directories:
+            self.log_directories.append(log_directory)
+            base_log_path = os.path.dirname(self.log_paths[self.log_directories[0]])
+            log_path = os.path.join(base_log_path, log_directory)
+            if not os.path.exists(log_path):
+                os.makedirs(log_path)
+            self.log_paths[log_directory] = log_path
 
-            with open(self.log_path, 'w') as file:
-                file.write("Timestamp(epoch_ms)\tVoltage(V)\tCurrent(A)\tTotal Energy(Wh)")
 
-        with open(self.log_path, 'a') as file:
-            timestamp, voltage, current = self.entries[-1]
-            file.write(f"{timestamp}\t{voltage:.2f}V\t{current:.3f}A\t{self.total_energy:.3f}Wh\n")
-        
+    def _create_default_save_paths(self, log_directories : list[str]) -> dict[str, str]:
+
+        current_directory = os.path.dirname(os.path.abspath(__file__))
+        parent_directory = os.path.dirname(current_directory)
+
+        logs_path = os.path.join(parent_directory, 'logs')
+        if not os.path.exists(logs_path):
+            os.makedirs(logs_path)
+
+        current_execution = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        current_execution_path = os.path.join(logs_path, current_execution)
+        if not os.path.exists(current_execution_path):
+            os.makedirs(current_execution_path)
+
+        log_paths = {}
+        for log_directory in log_directories:
+            folder_path = os.path.join(current_execution_path, log_directory)
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+            log_paths[log_directory] = folder_path
+        return log_paths
+    
+
+def print_and_log(logger : DataLogger, message : str):
+    print(message)
+    if not message.endswith("\n"):
+        message += "\n"
+    logger.save_data("terminal", message)
+
+def append_timestamp(timestamp, data):
+    readable_timestamp = time.strftime("%H:%M:%S", time.localtime(float(timestamp / 1000)))
+    return f"{data}\t{timestamp}\t{readable_timestamp}\n"

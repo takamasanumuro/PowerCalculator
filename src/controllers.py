@@ -2,6 +2,13 @@
 import serial
 import time
 import re
+from collections import namedtuple
+from typing import Optional
+
+
+#Locals
+from analyzers import *
+
 
 class PowerSupplyController:
     def __init__(self, port, baudrate = 9600):
@@ -51,6 +58,9 @@ class PowerSupplyController:
         self.serial.close()
 
 
+
+DataPoint = namedtuple("DataPoint", ["value", "unit", "timestamp"])
+
 class YokogawaController:
     def __init__(self, serial_connection : serial.Serial):
         self.serial = serial_connection
@@ -74,63 +84,149 @@ class YokogawaController:
         return (value, unit)
 
 
-    def read_measurements(self):
+    def read_measurements(self) -> DataPoint:
         if not self.serial.is_open:
-            return (None, None, None)
+            return DataPoint(None, None, None)
         self._ask_readings()
         line = self.serial.readline()
         try:
             value, unit = self._parse_readings(line.decode())
             unit = format_unit(value, unit)
         except ValueError as e:
-            return (None, None, None)
+            return DataPoint(None, None, None)
         timestamp_epoch_ms = int(time.time() * 1000)
-        return (value, unit, timestamp_epoch_ms)
+        return DataPoint(value, unit, timestamp_epoch_ms)
     
     def close(self):
         self.serial.close()
 
 class RelayController:
-    def __init__(self, serial_connection : serial.Serial):
+    def __init__(self, serial_connection : serial.Serial, relay_number : int):
         self.serial = serial_connection
+        self.relay_number = relay_number
+        assert relay_number in [1, 2, 3, 4], "Invalid relay number"
+        self.relay_state = "OFF"
     
     def send_command(self, command):
         self.serial.write(command.encode())
         time.sleep(0.050)
 
-    def set_relay(self, relay_number : int, state : str):
+    def set_relay(self, state : str):
         assert state in ["ON", "OFF"], "Invalid state"
-        command = f"RELAY;{relay_number};{state}\r\n"
+        command = f"RELAY;{self.relay_number};{state}\r\n"
         self.send_command(command)
+        self.relay_state = state
+
+    def get_relay_state(self):
+        return self.relay_state
     
     def close(self):
         self.serial.close()
 
 class ChargeController():
 
-    MODES = ["monitor", "charge", "discharge"]
+    MODES = ["monitor", "cycle"]
+    CYCLE_STATES = ["precharge", "discharge", "recharge"]
 
-    def __init__(self, relay_controller : RelayController) -> None:
+    def __init__(self, relay_controller : RelayController, power_analyzer : PowerAnalyzer, logger : DataLogger) -> None:
         self.mode = "monitor"
+        self.cycle_state = "precharge"
+        self.cycle_completed = False
         self.relay_controller = relay_controller
-        self.running = True
+        self.power_analyzer = power_analyzer
+        self.logger = logger
+        self.max_charge_voltage = None
+        self.charge_cutoff_current = None
+        self.discharge_cutoff_voltage = None
+        self.transition_map = {
+            "precharge": self._handle_charge,
+            "discharge": self._handle_discharge,
+            "recharge": self._handle_recharge
+        }
+
+        self.logger.add_save_paths(["monitor"])
+        self.logger.add_save_paths(self.CYCLE_STATES)
+
+    def _next_cycle_state(self):
+        if self.mode != "cycle":
+            return
+        
+        cycle_states = ["precharge", "discharge", "recharge"]
+        current_index = cycle_states.index(self.cycle_state)
+        next_index = (current_index + 1) % len(cycle_states)
+        self.cycle_state = cycle_states[next_index]
+
+        relay_state = "ON" if self.cycle_state == "discharge" else "OFF"
+        self.relay_controller.set_relay(relay_state)
+        
+        print(f"CONTROLLER: Transitioning to {self.cycle_state}")
+
+
+    def _handle_charge(self, voltage, current):
+        if voltage >= self.max_charge_voltage and current <= self.charge_cutoff_current:
+            self._next_cycle_state()
+
+    def _handle_discharge(self, voltage, current):
+        if voltage <= self.discharge_cutoff_voltage:
+            self._next_cycle_state()
+
+    def _handle_recharge(self, voltage, current):
+        if voltage >= self.max_charge_voltage and current <= self.charge_cutoff_current:
+            #Cycle completed
+            self.cycle_completed = True
+            self.set_mode("monitor")
+            print ("CONTROLLER: Cycle completed")
+
+    def set_charge_threshold(self, max_charge_voltage : float, charge_cutoff_current : float):
+        self.max_charge_voltage = max_charge_voltage
+        self.charge_cutoff_current = charge_cutoff_current
+
+    def set_discharge_threshold(self, discharge_cutoff_voltage : float):
+        self.discharge_cutoff_voltage = discharge_cutoff_voltage
+
+    def watch_values(self, voltage, current, timestamp):  
+        assert voltage is not None, "CHARGE CONTROLLER: Voltage is None"
+        assert current is not None, "CHARGE CONTROLLER: Current is None"
+
+        power = voltage * current
+        accumulated_energy = self.power_analyzer.calculate_energy()
+        
+        if self.mode == "cycle":
+            self.transition_map[self.cycle_state](voltage, current)
+
+        directory = self.mode if self.mode != "cycle" else self.cycle_state
+        self._log_measurements(directory, voltage, current, power, accumulated_energy, timestamp)
+
+              
+    def _log_measurements(self, directory, voltage, current, power, energy, timestamp):
+        #convert epoch time to human readable format
+        data = f"{voltage:.2f}V {current:.3f}A {energy:.4f}Wh"
+        timestamped_data = append_timestamp(timestamp, data)
+        self.logger.save_data(directory, timestamped_data)
+           
 
     def set_mode(self, mode):
         assert mode in self.MODES, f"Invalid mode: {mode}"
+        if mode == self.mode:
+            return
+        self.mode = mode
+        self.power_analyzer.reset()
 
         if mode == "monitor":
-            #disable_power_supply() #TODO
-            pass
+            self.relay_controller.set_relay("OFF")
 
-        if mode in ["charge", "monitor"]:
-            self.relay_controller.set_relay(relay_number = 1, state = "OFF")
-        elif mode == "discharge":
-            self.relay_controller.set_relay(relay_number = 1, state = "ON")
+    def flip_relay(self):
+        current_state = self.relay_controller.get_relay_state()
+        new_state = "ON" if current_state == "OFF" else "OFF"
+        self.relay_controller.set_relay(new_state) 
+
+    def get_mode(self):
+        return self.mode
+    
+    def get_available_modes(self) -> list[str]:
+        return self.MODES
+
         
-        self.mode = mode
-
-        
-
 
 
 def count_decimal_places(number: float) -> int:
@@ -166,3 +262,24 @@ def format_unit(value, raw_decoded_unit : str):
     return match_unit_trimmed
 
     
+def check_if_power_available(data_points : list[DataPoint]) -> tuple[bool, Optional[float], Optional[float]]:
+    if len(data_points) != 2:
+        return (False, None, None)
+    if data_points[0].value is None or data_points[1].value is None:
+        return (False, None, None)
+    voltage, current = find_current_and_voltage_units(data_points)
+
+    if voltage is None or current is None:
+        return (False, None, None)
+
+    return (True, voltage, current)
+
+
+def find_current_and_voltage_units(data_points : list[DataPoint]) -> tuple[Optional[float], Optional[float]]:
+    voltage, current = None, None
+    for data_point in data_points:
+        if re.search(r"\w?[V]", data_point.unit):
+            voltage = float(data_point.value)
+        elif re.search(r"\w?[A]", data_point.unit):
+            current = float(data_point.value)
+    return (voltage, current)
