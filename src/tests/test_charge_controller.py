@@ -84,6 +84,36 @@ class TestChargeController(unittest.TestCase):
             self.power_analyzer.add_entry(voltage, current, timestamp)
             self.charge_controller.watch_values(voltage, current, timestamp)
 
+        recharge_data = [
+            (2.80, 0.5), # Above discharge cutoff voltage
+            (2.85, 0.5),
+            (2.90, 0.5),
+            (2.95, 0.5),
+            (3.00, 0.5),
+            (3.05, 0.5),
+            (3.10, 0.5),
+            (3.15, 0.5),
+            (3.20, 0.5),
+            (3.25, 0.5),
+            (3.30, 0.5),
+            (3.35, 0.5),
+            (3.40, 0.5),
+            (3.45, 0.5),
+            (3.50, 0.5),
+            (3.55, 0.5),
+            (3.60, 0.5),
+            (3.65, 0.5),
+            (3.65, 0.3),
+            (3.65, 0.2),
+            (3.65, 0.1), # At the discharge cutoff point
+            (3.65, 0.0), # Below discharge cutoff voltage
+        ]
+
+        for voltage, current in recharge_data:
+            timestamp = time.time() * 1000
+            self.power_analyzer.add_entry(voltage, current, timestamp)
+            self.charge_controller.watch_values(voltage, current, timestamp)
+
 
 
 if __name__ == '__main__':

@@ -158,6 +158,8 @@ class ChargeController():
 
         relay_state = "ON" if self.cycle_state == "discharge" else "OFF"
         self.relay_controller.set_relay(relay_state)
+
+        self.power_analyzer.reset()
         
         print(f"CONTROLLER: Transitioning to {self.cycle_state}")
 
@@ -175,7 +177,8 @@ class ChargeController():
             #Cycle completed
             self.cycle_completed = True
             self.set_mode("monitor")
-            print ("CONTROLLER: Cycle completed")
+            print("CONTROLLER: Cycle completed\nCheck the logs for more information")
+            exit()
 
     def set_charge_threshold(self, max_charge_voltage : float, charge_cutoff_current : float):
         self.max_charge_voltage = max_charge_voltage
