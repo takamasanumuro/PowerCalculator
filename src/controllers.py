@@ -165,7 +165,7 @@ class ChargeController():
 
 
     def _handle_charge(self, voltage, current):
-        if voltage >= self.max_charge_voltage and current <= self.charge_cutoff_current:
+        if voltage >= self.max_charge_voltage and abs(current) <= self.charge_cutoff_current:
             self._next_cycle_state()
 
     def _handle_discharge(self, voltage, current):
@@ -173,7 +173,7 @@ class ChargeController():
             self._next_cycle_state()
 
     def _handle_recharge(self, voltage, current):
-        if voltage >= self.max_charge_voltage and current <= self.charge_cutoff_current:
+        if voltage >= self.max_charge_voltage and abs(current) <= self.charge_cutoff_current:
             #Cycle completed
             self.cycle_completed = True
             self.set_mode("monitor")
