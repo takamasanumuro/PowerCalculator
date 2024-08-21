@@ -41,7 +41,7 @@ def main():
     logger = DataLogger(["terminal"])
     charge_controller = ChargeController(relay_controller, power_analyzer, logger)
 
-    charge_controller.set_charge_threshold(max_charge_voltage = 3.62, charge_cutoff_current = 0.1)
+    charge_controller.set_charge_threshold(max_charge_voltage = 3.62, charge_cutoff_current = 0.250)
     charge_controller.set_discharge_threshold(discharge_cutoff_voltage = 2.8)
 
     
