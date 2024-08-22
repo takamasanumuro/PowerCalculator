@@ -43,9 +43,10 @@ class PowerAnalyzer:
         return total_energy
 
 class DataLogger:
-    def __init__(self, log_directories : list[str]):
+    def __init__(self, log_directories : list[str], root_folder : str = None):
         assert log_directories, "No log directories provided"
         self.log_directories : list[str] = log_directories
+        self.root_folder : str = root_folder
         self.log_paths : dict = self._create_default_save_paths(self.log_directories)
 
     def save_data(self, log_directory : str, data : str):
@@ -72,14 +73,23 @@ class DataLogger:
         if not os.path.exists(logs_path):
             os.makedirs(logs_path)
 
-        current_execution = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        current_execution_path = os.path.join(logs_path, current_execution)
-        if not os.path.exists(current_execution_path):
-            os.makedirs(current_execution_path)
+        current_date = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        current_date_path = os.path.join(logs_path, current_date)
+
+        if self.root_folder:
+            root_path = os.path.join(logs_path, self.root_folder)
+        else:
+            root_path = current_date_path
+            
+        if not os.path.exists(root_path):
+            os.makedirs(root_path)
+        else:
+            print("[ERROR]Chosen save folder already exists!")
+            exit()
 
         log_paths = {}
         for log_directory in log_directories:
-            folder_path = os.path.join(current_execution_path, log_directory)
+            folder_path = os.path.join(root_path, log_directory)
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
             log_paths[log_directory] = folder_path

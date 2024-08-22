@@ -21,6 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description = "Program to control charge / discharge cycles via serial-connected multimeters and relays")
     parser.add_argument("--multimeter_ports", nargs = 2, help = "Specify two multimeter ports (eg., COM3 COM4)")
     parser.add_argument("--relay_port", default = "COM17", help = "Specify the relay port")
+    parser.add_argument("--folder", default = None, help = "Name of file to save")
     args = parser.parse_args()
 
     multimeter_port_names : list[str] = args.multimeter_ports
@@ -28,6 +29,7 @@ def main():
         multimeter_port_names = list_yokogawa_multimeters()
 
     print(f"Ports = {multimeter_port_names}")
+    print(f"Folder = {args.folder}")
 
     #Automatically open serial ports for multimeters
     multimeter_ports = [serial.Serial(baudrate = 9600, timeout = 0.050) for _ in range(len(multimeter_port_names))]
@@ -48,7 +50,7 @@ def main():
 
     relay_controller = RelayController(relay_port, relay_number = 1)
     power_analyzer = PowerAnalyzer()
-    logger = DataLogger(["terminal"])
+    logger = DataLogger(["terminal"], args.folder)
     charge_controller = ChargeController(relay_controller, power_analyzer, logger)
 
     charge_controller.set_charge_threshold(max_charge_voltage = 3.62, charge_cutoff_current = 0.250)
