@@ -21,6 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description = "Program to control charge / discharge cycles via serial-connected multimeters and relays")
     parser.add_argument("--multimeter_ports", nargs = 2, help = "Specify two multimeter ports (eg., COM3 COM4)")
     parser.add_argument("--relay_port", default = "COM17", help = "Specify the relay port")
+    parser.add_argument("--relay_number", default = 1, help = "Specify the relay number on the relay board")
     parser.add_argument("--folder", default = None, help = "Name of file to save")
     args = parser.parse_args()
 
@@ -28,8 +29,13 @@ def main():
     if not multimeter_port_names:
         multimeter_port_names = list_yokogawa_multimeters()
 
-    print(f"Ports = {multimeter_port_names}")
+    program_args_intro = "-------------Chosen arguments-------------"
+    print(program_args_intro)
+    print(f"Multimeter Ports = {multimeter_port_names}")
+    print(f"Relay Port: {args.relay_port}")
+    print(f"Relay Number: {args.relay_number}")
     print(f"Folder = {args.folder}")
+    print("-"*len(program_args_intro))
 
     #Automatically open serial ports for multimeters
     multimeter_ports = [serial.Serial(baudrate = 9600, timeout = 0.050) for _ in range(len(multimeter_port_names))]
@@ -48,7 +54,7 @@ def main():
     
     multimeters = [YokogawaController(multimeter_port) for multimeter_port in multimeter_ports]
 
-    relay_controller = RelayController(relay_port, relay_number = 1)
+    relay_controller = RelayController(relay_port, relay_number = int(args.relay_number))
     power_analyzer = PowerAnalyzer()
     logger = DataLogger(["terminal"], args.folder)
     charge_controller = ChargeController(relay_controller, power_analyzer, logger)
@@ -83,7 +89,9 @@ def main():
                 terminal_output_message += f"Power: {power:.4f}W\t\tEnergy: {accumulated_energy:.4f}Wh"
 
             if terminal_output_message:
-                stamped_output_message = append_timestamp(timestamp, terminal_output_message)
+                folder_str = f"\t{args.folder}" if args.folder else ""
+                output_message_with_folder = terminal_output_message + folder_str
+                stamped_output_message = append_timestamp(timestamp, output_message_with_folder)
                 print_and_log(logger, stamped_output_message)
 
             time.sleep(measurement_interval := 0.200)
