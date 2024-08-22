@@ -6,6 +6,8 @@ from collections import namedtuple
 #Third party
 from colorama import init, Fore, Style
 from tenacity import retry, stop_after_attempt, wait_fixed
+from serial.tools.list_ports import comports
+
 
 #locals
 from controllers import PowerSupplyController
@@ -61,11 +63,12 @@ def list_serial_ports_verbose() -> None:
         print("")
 
 def list_serial_ports() -> list[SerialPortInfo]:
-    from serial.tools.list_ports import comports
     return [SerialPortInfo(port.device, port.description) for port in comports()]
 
+
+
 def list_yokogawa_multimeters() -> list[str]:
-    devices = list_serial_ports()
+    devices : list[SerialPortInfo] = list_serial_ports()
     valid_multimeter_ports = [device.device for device in devices if "MODEL 92015" in device.description]
     assert len(valid_multimeter_ports) > 0, "No Yokogawa multimeters found"
     assert len(valid_multimeter_ports) < 3, "Only two Yokogawa multimeters are supported"

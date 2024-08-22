@@ -277,6 +277,11 @@ def check_if_power_available(data_points : list[DataPoint]) -> tuple[bool, Optio
 
     return (True, voltage, current)
 
+def get_timestamp(data_points : list[DataPoint]) -> int:
+    for data_point in data_points:
+        if data_point.timestamp:
+            return data_point.timestamp
+
 
 def find_current_and_voltage_units(data_points : list[DataPoint]) -> tuple[Optional[float], Optional[float]]:
     voltage, current = None, None

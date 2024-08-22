@@ -2,6 +2,7 @@
 import time 
 import serial
 from collections import namedtuple
+import argparse
 
 #Third party
 from colorama import Fore, Style, init
@@ -17,7 +18,16 @@ def handle_exit():
 
 def main():
 
-    multimeter_port_names : list[str] = list_yokogawa_multimeters()
+    parser = argparse.ArgumentParser(description = "Program to control charge / discharge cycles via serial-connected multimeters and relays")
+    parser.add_argument("--multimeter_ports", nargs = 2, help = "Specify two multimeter ports (eg., COM3 COM4)")
+    parser.add_argument("--relay_port", default = "COM17", help = "Specify the relay port")
+    args = parser.parse_args()
+
+    multimeter_port_names : list[str] = args.multimeter_ports
+    if not multimeter_port_names:
+        multimeter_port_names = list_yokogawa_multimeters()
+
+    print(f"Ports = {multimeter_port_names}")
 
     #Automatically open serial ports for multimeters
     multimeter_ports = [serial.Serial(baudrate = 9600, timeout = 0.050) for _ in range(len(multimeter_port_names))]
@@ -25,7 +35,7 @@ def main():
         multimeter_ports[i].port = multimeter_port_names[i]
 
     relay_port = serial.Serial(baudrate = 9600, timeout = 0.050)
-    relay_port.port = "COM17"
+    relay_port.port = args.relay_port
 
     all_ports = multimeter_ports + [relay_port]
 
@@ -61,8 +71,8 @@ def main():
                 terminal_output_message += f"{multimeter.serial.port}: {data_point.value} {data_point.unit}\t"
 
             is_power_available, voltage, current = check_if_power_available(data_points)
+            timestamp = get_timestamp(data_points)
             if is_power_available:
-                timestamp = data_points[0].timestamp
                 power_analyzer.add_entry(voltage, current, timestamp)
                 charge_controller.watch_values(voltage, current, timestamp)
                 
@@ -71,7 +81,7 @@ def main():
                 terminal_output_message += f"Power: {power:.4f}W\t\tEnergy: {accumulated_energy:.4f}Wh"
 
             if terminal_output_message:
-                stamped_output_message = append_timestamp(data_points[0].timestamp, terminal_output_message)
+                stamped_output_message = append_timestamp(timestamp, terminal_output_message)
                 print_and_log(logger, stamped_output_message)
 
             time.sleep(measurement_interval := 0.200)
