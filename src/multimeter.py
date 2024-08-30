@@ -20,8 +20,8 @@ def main():
 
     parser = argparse.ArgumentParser(description = "Program to control charge / discharge cycles via serial-connected multimeters and relays")
     parser.add_argument("--multimeter_ports", nargs = 2, help = "Specify two multimeter ports (eg., COM3 COM4)")
-    parser.add_argument("--relay_port", default = "COM17", help = "Specify the relay port")
-    parser.add_argument("--relay_number", default = 1, help = "Specify the relay number on the relay board")
+    parser.add_argument("--relay_port", default = "COM30", help = "Specify the relay port")
+    parser.add_argument("--relay_number", default = '1', help = "Specify the relay number on the relay board")
     parser.add_argument("--folder", default = None, help = "Name of file to save")
     args = parser.parse_args()
 
@@ -29,6 +29,7 @@ def main():
     if not multimeter_port_names:
         multimeter_port_names = list_yokogawa_multimeters()
 
+    print('\n' * 2)
     program_args_intro = "-------------Chosen arguments-------------"
     print(program_args_intro)
     print(f"Multimeter Ports = {multimeter_port_names}")
@@ -36,18 +37,21 @@ def main():
     print(f"Relay Number: {args.relay_number}")
     print(f"Folder = {args.folder}")
     print("-"*len(program_args_intro))
+    print('\n' * 2)
 
     #Automatically open serial ports for multimeters
     multimeter_ports = [serial.Serial(baudrate = 9600, timeout = 0.050) for _ in range(len(multimeter_port_names))]
     for i in range(len(multimeter_port_names)):
         multimeter_ports[i].port = multimeter_port_names[i]
 
-    relay_port = serial.Serial(baudrate = 9600, timeout = 0.050)
+    relay_port = serial.Serial(baudrate = 9600, timeout = 0.500)
     relay_port.port = args.relay_port
+    disable_reset_on_connect(relay_port)
+    relay_port.open()
+    relay_port.reset_output_buffer()
+    relay_port.close()
 
-    all_ports = multimeter_ports + [relay_port]
-
-    serial_opener_threads = [SerialOpenerThread(port) for port in all_ports]
+    serial_opener_threads = [SerialOpenerThread(port) for port in multimeter_ports]
     for opener in serial_opener_threads:
         opener.daemon = True
         opener.start()
@@ -63,7 +67,7 @@ def main():
     charge_controller.set_discharge_threshold(discharge_cutoff_voltage = 2.8)
 
     
-    keyboard_listener_thread = KeyboardListenerThread(charge_controller)
+    keyboard_listener_thread = KeyboardListenerThread(keyboard_input_callback, charge_controller)
     keyboard_listener_thread.daemon = True
     keyboard_listener_thread.start()
 

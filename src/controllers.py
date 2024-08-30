@@ -5,6 +5,8 @@ import re
 from collections import namedtuple
 from typing import Optional
 
+import serial.serialutil
+
 
 #Locals
 from analyzers import *
@@ -107,14 +109,23 @@ class RelayController:
         assert relay_number in [1, 2, 3, 4], "Invalid relay number"
         self.relay_state = "OFF"
     
-    def send_command(self, command):
+    def _send_command(self, command):
+
+        while not self.serial.is_open:
+            try:
+                self.serial.open()
+            except (serial.serialutil.SerialException):
+                raise
+
         self.serial.write(command.encode())
+        self.serial.flush() # Make sure all data is written to the port
+        self.serial.close()
         time.sleep(0.050)
 
     def set_relay(self, state : str):
         assert state in ["ON", "OFF"], "Invalid state"
         command = f"RELAY;{self.relay_number};{state}\r\n"
-        self.send_command(command)
+        self._send_command(command)
         self.relay_state = state
 
     def get_relay_state(self):

@@ -1,8 +1,8 @@
 #Builtins
 import threading
-from queue import Queue, Empty
 import time
 import serial
+import getpass
 
 #Third party
 import keyboard
@@ -91,16 +91,35 @@ def handle_keyboard_input(charge_controller : ChargeController):
         except KeyboardInterrupt:
             exit()
 
+
+def keyboard_input_callback(charge_controller : ChargeController, command : str):
+    match command:
+        case 'K':
+            charge_controller.set_mode("cycle")
+            print("Mode set to cycle")
+            time.sleep(1.000)
+        case 'R':
+            charge_controller.flip_relay()
+            print("Relay flipped")
+            time.sleep(1.000)
+    
+    time.sleep(0.100)
+    
+
 class KeyboardListenerThread(threading.Thread):
-    def __init__(self, charge_controller):
+    def __init__(self, input_callback, charge_controller):
+        self.input_callback = input_callback
         threading.Thread.__init__(self)
         self.charge_controller = charge_controller
-        self.running = True
         self.daemon = True
 
     def run(self):
-        handle_keyboard_input(self.charge_controller)
-
+        try:
+            while True:
+                self.input_callback(self.charge_controller, getpass.getpass(""))
+        except (KeyboardInterrupt):
+            exit()
+            
     def stop(self):
         self.running = False
 

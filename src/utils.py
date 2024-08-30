@@ -75,3 +75,18 @@ def list_yokogawa_multimeters() -> list[str]:
     
     return valid_multimeter_ports
 
+
+def disable_reset_on_connect(serial: Serial):
+    """
+    Disables the reset on connect feature for the given serial connection.
+
+    This function sets the Data Terminal Ready (DTR) signal to 0, which can be
+    used to prevent certain devices from resetting when a serial connection is established.
+
+    Parameters:
+    serial (Serial): The serial connection object for which to disable the reset on connect feature.
+
+    Returns:
+    None
+    """
+    serial.dtr = 0
