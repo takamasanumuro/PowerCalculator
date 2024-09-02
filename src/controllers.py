@@ -97,7 +97,7 @@ class YokogawaController:
         except ValueError as e:
             return DataPoint(None, None, None)
         timestamp_epoch_ms = int(time.time() * 1000)
-        return DataPoint(value, unit, timestamp_epoch_ms)
+        return DataPoint(float(value), unit, timestamp_epoch_ms)
     
     def close(self):
         self.serial.close()
@@ -281,7 +281,7 @@ def check_if_power_available(data_points : list[DataPoint]) -> tuple[bool, Optio
         return (False, None, None)
     if data_points[0].value is None or data_points[1].value is None:
         return (False, None, None)
-    voltage, current = find_current_and_voltage_units(data_points)
+    voltage, current = find_current_and_voltage_values(data_points)
 
     if voltage is None or current is None:
         return (False, None, None)
@@ -294,11 +294,30 @@ def get_timestamp(data_points : list[DataPoint]) -> int:
             return data_point.timestamp
 
 
-def find_current_and_voltage_units(data_points : list[DataPoint]) -> tuple[Optional[float], Optional[float]]:
+def find_current_and_voltage_values(data_points : list[DataPoint]) -> tuple[Optional[float], Optional[float]]:
     voltage, current = None, None
     for data_point in data_points:
-        if re.search(r"\w?[V]", data_point.unit):
-            voltage = float(data_point.value)
-        elif re.search(r"\w?[A]", data_point.unit):
-            current = float(data_point.value)
+        if voltage is None:
+            voltage = find_voltage_value(data_point)
+        if current is None:
+            current = find_current_value(data_point)
     return (voltage, current)
+
+
+def is_current_unit(unit : str) -> bool:
+    if unit is None:
+        return False
+    return re.search(r"\w?[A]", unit)
+
+def is_voltage_unit(unit : str) -> bool:
+    return re.search(r"\w?[V]", unit)
+
+def find_current_value(data_point: DataPoint) -> Optional[float]:
+    if not is_current_unit(data_point.unit):
+        return None
+    return float(data_point.value)
+        
+def find_voltage_value(data_point : DataPoint) -> Optional[float]:
+    if not is_voltage_unit(data_point.unit):
+        return None
+    return float(data_point.value)

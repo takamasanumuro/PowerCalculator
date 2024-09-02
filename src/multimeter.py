@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--relay_port", default = "COM30", help = "Specify the relay port")
     parser.add_argument("--relay_number", default = '1', help = "Specify the relay number on the relay board")
     parser.add_argument("--folder", default = None, help = "Name of file to save")
+    parser.add_argument("--add_current_calibration", default = '0.0', help = "Add a current calibration value to the current")
     args = parser.parse_args()
 
     multimeter_port_names : list[str] = args.multimeter_ports
@@ -73,18 +74,24 @@ def main():
 
     try:
         while True:
-            data_points : DataPoint = [None] * len(multimeters)
+            data_points : list[DataPoint] = [DataPoint(None, None, None)] * len(multimeters)
             terminal_output_message = ""
             for i, multimeter in enumerate(multimeters):
-                data_point = multimeter.read_measurements()
-                data_points[i] = data_point
-                if data_point.value is None:
+                raw_data_point = multimeter.read_measurements()
+                if raw_data_point.value is None:
                     continue
-                terminal_output_message += f"{multimeter.serial.port}: {data_point.value} {data_point.unit}\t"
+                
+                if is_current_unit(raw_data_point.unit):
+                    data_point = DataPoint(raw_data_point.value + float(args.add_current_calibration), raw_data_point.unit, raw_data_point.timestamp)
+                else:
+                    data_point = raw_data_point   
+                data_points[i] = data_point
+                terminal_output_message += f"{multimeter.serial.port}: {data_point.value:.4f} {data_point.unit}\t"
 
             is_power_available, voltage, current = check_if_power_available(data_points)
             timestamp = get_timestamp(data_points)
             if is_power_available:
+                #current += float(args.add_current_calibration)
                 power_analyzer.add_entry(voltage, current, timestamp)
                 charge_controller.watch_values(voltage, current, timestamp)
                 

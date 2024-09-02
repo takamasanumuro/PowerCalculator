@@ -11,17 +11,18 @@ def main():
     script_path = os.path.join('src', 'multimeter.py')
 
     # Predefine the arguments
-    multimeter_ports = ['', '']  # Replace with your desired ports
-    relay_port = ''  # Replace with your desired relay port
-    relay_number = '' # Replace with your desired relay number
-    folder_name = ''  # Replace with your desired folder name
+    multimeter_ports = ['COM19', 'COM20']  # Replace with your desired ports
+    relay_port = 'COM30'  # Replace with your desired relay port
+    relay_number = '1' # Replace with your desired relay number
+    folder_name = '15S8P'  # Replace with your desired folder name
 
     command = [
         'python', script_path,
         '--multimeter_ports', multimeter_ports[0], multimeter_ports[1],
         '--relay_port', relay_port,
         '--relay_number', relay_number,
-        '--folder', folder_name
+        '--folder', folder_name,
+
     ]
 
     try:
