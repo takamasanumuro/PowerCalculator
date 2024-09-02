@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
-int relayPins[] = {2, 3, 4, 5};
+//Check platformio.ini for the correct pin numbers
+int relayPins[] = {PIN_RELAY_1, PIN_RELAY_2, PIN_RELAY_3, PIN_RELAY_4};
 int relayCount = sizeof(relayPins) / sizeof(relayPins[0]);
 
 #define RELAY_OFF HIGH
@@ -11,6 +12,9 @@ void setupRelays() {
         pinMode(relayPins[i], OUTPUT);
         digitalWrite(relayPins[i], RELAY_OFF);
     }
+
+    //Use the VCC pin to power the optocoupler on the relay module
+    pinMode(PIN_RELAY_VCC, OUTPUT); digitalWrite(PIN_RELAY_VCC, HIGH);
 }
 
 int parseRelayCommand(char* command) {
