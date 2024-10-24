@@ -64,8 +64,8 @@ def main():
     logger = DataLogger(["terminal"], args.folder)
     charge_controller = ChargeController(relay_controller, power_analyzer, logger)
 
-    charge_controller.set_charge_threshold(max_charge_voltage = 3.62, charge_cutoff_current = 0.250)
-    charge_controller.set_discharge_threshold(discharge_cutoff_voltage = 2.8)
+    charge_controller.set_charge_threshold(max_charge_voltage = 8.32, charge_cutoff_current = 0.600)
+    charge_controller.set_discharge_threshold(discharge_cutoff_voltage = 6.00)
 
     
     keyboard_listener_thread = KeyboardListenerThread(keyboard_input_callback, charge_controller)
@@ -102,7 +102,8 @@ def main():
             if terminal_output_message:
                 folder_str = f"\t{args.folder}" if args.folder else ""
                 output_message_with_folder = terminal_output_message + folder_str
-                stamped_output_message = append_timestamp(timestamp, output_message_with_folder)
+                output_message_with_mode = f"{output_message_with_folder}\t{charge_controller.get_mode()}"
+                stamped_output_message = append_timestamp(timestamp, output_message_with_mode)
                 print_and_log(logger, stamped_output_message)
 
             time.sleep(measurement_interval := 0.200)

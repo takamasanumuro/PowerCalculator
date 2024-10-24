@@ -12,9 +12,10 @@ def main():
 
     # Predefine the arguments
     multimeter_ports = ['COM19', 'COM20']  # Replace with your desired ports
-    relay_port = 'COM30'  # Replace with your desired relay port
+    relay_port = 'COM31'  # Replace with your desired relay port
     relay_number = '1' # Replace with your desired relay number
-    folder_name = '15S8P'  # Replace with your desired folder name
+    folder_name = 'B2MD17'  # Replace with your desired folder name
+    add_current_calibration = '0.000'  # Replace with your desired current calibration value
 
     command = [
         'python', script_path,
@@ -22,7 +23,7 @@ def main():
         '--relay_port', relay_port,
         '--relay_number', relay_number,
         '--folder', folder_name,
-
+        '--add_current_calibration', add_current_calibration,
     ]
 
     try:

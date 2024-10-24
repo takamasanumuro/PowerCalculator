@@ -6,6 +6,8 @@ from collections import namedtuple
 from typing import Optional
 
 import serial.serialutil
+import chime
+import requests
 
 
 #Locals
@@ -189,6 +191,10 @@ class ChargeController():
             self.cycle_completed = True
             self.set_mode("monitor")
             print("CONTROLLER: Cycle completed\nCheck the logs for more information")
+            requests.post("https://ntfy.sh/alertas-bateria", data = "Ciclo de carga completado")
+            chime.theme("pokemon")
+            chime.success()
+            time.sleep(6)
             exit()
 
     def set_charge_threshold(self, max_charge_voltage : float, charge_cutoff_current : float):

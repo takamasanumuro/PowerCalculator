@@ -15,10 +15,10 @@ def main():
 
     # Predefine the arguments
     multimeter_ports = ['COM17', 'COM18']  # Replace with your desired ports
-    relay_port = 'COM30'  # Replace with your desired relay port
+    relay_port = 'COM31'  # Replace with your desired relay port
     relay_number = '4'
-    folder_name = '15S8P-CONVERSOR_2'  # Replace with your desired folder name
-    add_current_calibration = '0.099'  # Replace with your desired current calibration value
+    folder_name = 'A3'  # Replace with your desired folder name
+    add_current_calibration = '0.000'  # Replace with your desired current calibration value
 
     command = [
         'python', script_path,

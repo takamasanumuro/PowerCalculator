@@ -6,6 +6,7 @@ import getpass
 
 #Third party
 import keyboard
+import chime
 
 #Locals
 from controllers import *
@@ -73,17 +74,21 @@ def handle_keyboard_input(charge_controller : ChargeController):
         try:
             if keyboard.is_pressed("ctrl+m"):
                 charge_controller.set_mode("monitor")
-                print("Mode set to monitor")
+                print("[CONTROLLER]Mode set to monitor")
                 time.sleep(1.000)
 
             if keyboard.is_pressed("ctrl+k"):
                 charge_controller.set_mode("cycle")
-                print("Mode set to cycle")
-                time.sleep(1.000)
+                print("[CONTROLLER]Mode set to cycle")
+                previous_theme = chime.theme()
+                chime.theme('pokemon')
+                chime.success()
+                time.sleep(6.000)
+                chime.theme(previous_theme)
 
             if keyboard.is_pressed("ctrl+r"):
                 charge_controller.flip_relay()
-                print("Relay flipped")
+                print("[CONTROLLER]Relay flipped")
                 time.sleep(1.000)
 
             time.sleep(0.100)
@@ -96,11 +101,18 @@ def keyboard_input_callback(charge_controller : ChargeController, command : str)
     match command:
         case 'K':
             charge_controller.set_mode("cycle")
-            print("Mode set to cycle")
-            time.sleep(1.000)
+            print("[CONTROLLER]Mode set to cycle")
+            previous_theme = chime.theme()
+            chime.theme('big-sur')
+            chime.success()
+            chime.theme(previous_theme)
         case 'R':
+            previous_theme = chime.theme()
+            chime.theme('big-sur')
+            chime.success()
+            chime.theme(previous_theme)
             charge_controller.flip_relay()
-            print("Relay flipped")
+            print("[CONTROLLER]Relay flipped")
             time.sleep(1.000)
     
     time.sleep(0.100)
