@@ -24,6 +24,9 @@ def main():
     parser.add_argument("--relay_number", default = '1', help = "Specify the relay number on the relay board")
     parser.add_argument("--folder", default = None, help = "Name of file to save")
     parser.add_argument("--add_current_calibration", default = '0.0', help = "Add a current calibration value to the current")
+    parser.add_argument("--charge_cutoff_voltage", default = '3.65', help = "Specify the charge cutoff voltage")
+    parser.add_argument("--charge_cutoff_current", default = '0.600', help = "Specify the charge cutoff current")
+    parser.add_argument("--discharge_cutoff_voltage", default = '2.50', help = "Specify the discharge cutoff voltage")
     args = parser.parse_args()
 
     multimeter_port_names : list[str] = args.multimeter_ports
@@ -37,6 +40,10 @@ def main():
     print(f"Relay Port: {args.relay_port}")
     print(f"Relay Number: {args.relay_number}")
     print(f"Folder = {args.folder}")
+    print(f"Add Current Calibration = {args.add_current_calibration}")
+    print(f"Charge Cutoff Voltage = {args.charge_cutoff_voltage}")
+    print(f"Charge Cutoff Current = {args.charge_cutoff_current}")
+    print(f"Discharge Cutoff Voltage = {args.discharge_cutoff_voltage}")
     print("-"*len(program_args_intro))
     print('\n' * 2)
 
@@ -64,8 +71,8 @@ def main():
     logger = DataLogger(["terminal"], args.folder)
     charge_controller = ChargeController(relay_controller, power_analyzer, logger)
 
-    charge_controller.set_charge_threshold(max_charge_voltage = 8.32, charge_cutoff_current = 0.600)
-    charge_controller.set_discharge_threshold(discharge_cutoff_voltage = 6.00)
+    charge_controller.set_charge_threshold(float(args.charge_cutoff_voltage), float(args.charge_cutoff_current))
+    charge_controller.set_discharge_threshold(float(args.discharge_cutoff_voltage))
 
     
     keyboard_listener_thread = KeyboardListenerThread(keyboard_input_callback, charge_controller)
