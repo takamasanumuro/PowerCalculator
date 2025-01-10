@@ -13,9 +13,6 @@ from controllers import *
 from analyzers import *
 from threads import *
 
-def handle_exit():
-    pass
-
 def main():
 
     parser = argparse.ArgumentParser(description = "Program to control charge / discharge cycles via serial-connected multimeters and relays")
@@ -73,6 +70,7 @@ def main():
 
     charge_controller.set_charge_threshold(float(args.charge_cutoff_voltage), float(args.charge_cutoff_current))
     charge_controller.set_discharge_threshold(float(args.discharge_cutoff_voltage))
+    charge_controller.set_mode("monitor")
 
     
     keyboard_listener_thread = KeyboardListenerThread(keyboard_input_callback, charge_controller)
@@ -118,7 +116,8 @@ def main():
     except (KeyboardInterrupt, SystemExit): 
         for opener in serial_opener_threads:
             opener.stop()
-        handle_exit()
+    finally:
+        charge_controller.set_mode("monitor")
 
 if __name__ == '__main__':
     main()
