@@ -3,15 +3,132 @@ import time
 import serial
 from collections import namedtuple
 import argparse
+import threading
 
 #Third party
 from colorama import Fore, Style, init
 from tenacity import retry, stop_after_attempt, wait_fixed
+import matplotlib.pyplot as plot
+from matplotlib.animation import FuncAnimation
+from queue import Queue, Empty
 
 #Locals
 from controllers import *
 from analyzers import *
 from threads import *
+
+#Thread safe queue
+data_queue = Queue()
+
+#Setup the live plot
+voltage_values =  []
+current_values =  []
+timestamps     =  []
+
+figure, axes = plot.subplots(2, 1, figsize = (10, 6))
+
+#Voltage plot
+axes[0].set_title("Voltage")
+axes[0].set_ylabel("Voltage (V)")
+axes[0].set_xlabel("Time (s)")
+axes[0].set_xlim(0, 10)
+axes[0].set_ylim(2, 4)
+axes[0].legend(loc = "upper right")
+line_voltage, = axes[0].plot([], [], label = "Voltage", color = "blue")
+
+#Current plot
+axes[1].set_title("Current")
+axes[1].set_xlabel("Time (s)")
+axes[1].set_ylabel("Current (A)")
+axes[1].set_xlim(0, 10)
+axes[1].set_ylim(-5, 5)
+axes[1].legend(loc = "upper right")
+line_current, = axes[1].plot([], [], label = "Current", color = "red")
+
+#Update function for the live plot
+def update_plot(frame):
+    global voltage_values, current_values, timestamps
+
+    try:
+        while True:
+            voltage, current, timestamp = data_queue.get_nowait()
+            voltage_values.append(voltage)
+            current_values.append(current)
+            timestamps.append(timestamp)
+
+            #number_datapoints = 100
+            #voltage_values = voltage_values[-number_datapoints:]
+            #current_values = current_values[-number_datapoints:]
+            #timestamps = timestamps[-number_datapoints:]
+    except Empty:
+        pass
+
+    if len(timestamps) > 0:
+        #Update data for voltage
+        line_voltage.set_data(timestamps, voltage_values)
+        axes[0].set_xlim(timestamps[0], timestamps[-1])
+
+        #Update data for current
+        line_current.set_data(timestamps, current_values)
+        axes[1].set_xlim(timestamps[0], timestamps[-1])
+
+        axes[0].relim()
+        axes[0].autoscale_view()
+        axes[1].relim()
+        axes[1].autoscale_view()
+    
+    return line_voltage, line_current
+
+animation = FuncAnimation(figure, update_plot, interval = 100)
+
+def start_plot():
+    plot.tight_layout()
+    plot.show()
+
+def main_loop(args, multimeters, relay_controller, power_analyzer, logger, charge_controller):
+    start_time_ms = time.time() * 1000
+    try:
+        while True:
+            data_points: list[DataPoint] = [DataPoint(None, None, None)] * len(multimeters)
+            terminal_output_message = ""
+            for i, multimeter in enumerate(multimeters):
+                raw_data_point = multimeter.read_measurements()
+                if raw_data_point.value is None:
+                    continue
+                
+                if is_current_unit(raw_data_point.unit):
+                    data_point = DataPoint(raw_data_point.value + float(args.add_current_calibration), raw_data_point.unit, raw_data_point.timestamp)
+                else:
+                    data_point = raw_data_point   
+                data_points[i] = data_point
+                terminal_output_message += f"{multimeter.serial.port}: {data_point.value:.4f} {data_point.unit}\t"
+
+            is_power_available, voltage, current = check_if_power_available(data_points)
+            timestamp = get_timestamp(data_points)
+            if is_power_available:
+                relative_timestamp_seconds = (timestamp - start_time_ms) / 1000
+                data_queue.put((voltage, current, relative_timestamp_seconds))
+                power_analyzer.add_entry(voltage, current, timestamp)
+                charge_controller.watch_values(voltage, current, timestamp)
+                
+                accumulated_energy = power_analyzer.calculate_energy()
+                power = voltage * current
+                terminal_output_message += f"Power: {power:.4f}W\t\tEnergy: {accumulated_energy:.4f}Wh"
+
+            if terminal_output_message:
+                folder_str = f"\t{args.folder}" if args.folder else ""
+                output_message_with_folder = terminal_output_message + folder_str
+                output_message_with_mode = f"{output_message_with_folder}\t{charge_controller.get_mode()}"
+                output_message_with_mode = f"{output_message_with_mode}\t{time.time() - start_time_ms / 1000:.2f}s"
+                stamped_output_message = append_timestamp(timestamp, output_message_with_mode)
+                print_and_log(logger, stamped_output_message)
+
+            time.sleep(measurement_interval := 0.100)
+
+    except (KeyboardInterrupt, SystemExit): 
+        print(Fore.RED + "Exiting..." + Style.RESET_ALL)
+    finally:
+        charge_controller.set_mode("monitor")
 
 def main():
 
@@ -71,53 +188,20 @@ def main():
     charge_controller.set_charge_threshold(float(args.charge_cutoff_voltage), float(args.charge_cutoff_current))
     charge_controller.set_discharge_threshold(float(args.discharge_cutoff_voltage))
     charge_controller.set_mode("monitor")
-
     
     keyboard_listener_thread = KeyboardListenerThread(keyboard_input_callback, charge_controller)
     keyboard_listener_thread.daemon = True
     keyboard_listener_thread.start()
 
-    try:
-        while True:
-            data_points : list[DataPoint] = [DataPoint(None, None, None)] * len(multimeters)
-            terminal_output_message = ""
-            for i, multimeter in enumerate(multimeters):
-                raw_data_point = multimeter.read_measurements()
-                if raw_data_point.value is None:
-                    continue
-                
-                if is_current_unit(raw_data_point.unit):
-                    data_point = DataPoint(raw_data_point.value + float(args.add_current_calibration), raw_data_point.unit, raw_data_point.timestamp)
-                else:
-                    data_point = raw_data_point   
-                data_points[i] = data_point
-                terminal_output_message += f"{multimeter.serial.port}: {data_point.value:.4f} {data_point.unit}\t"
+    main_thread = threading.Thread(target=main_loop, args=(args, multimeters, relay_controller, power_analyzer, logger, charge_controller))
+    main_thread.daemon = True
+    main_thread.start()
 
-            is_power_available, voltage, current = check_if_power_available(data_points)
-            timestamp = get_timestamp(data_points)
-            if is_power_available:
-                #current += float(args.add_current_calibration)
-                power_analyzer.add_entry(voltage, current, timestamp)
-                charge_controller.watch_values(voltage, current, timestamp)
-                
-                accumulated_energy = power_analyzer.calculate_energy()
-                power = voltage * current
-                terminal_output_message += f"Power: {power:.4f}W\t\tEnergy: {accumulated_energy:.4f}Wh"
-
-            if terminal_output_message:
-                folder_str = f"\t{args.folder}" if args.folder else ""
-                output_message_with_folder = terminal_output_message + folder_str
-                output_message_with_mode = f"{output_message_with_folder}\t{charge_controller.get_mode()}"
-                stamped_output_message = append_timestamp(timestamp, output_message_with_mode)
-                print_and_log(logger, stamped_output_message)
-
-            time.sleep(measurement_interval := 0.200)
-
-    except (KeyboardInterrupt, SystemExit): 
-        for opener in serial_opener_threads:
-            opener.stop()
-    finally:
-        charge_controller.set_mode("monitor")
+    window_title : str = f"{args.folder}" if args.folder else "Live Plot"
+    figure.suptitle(window_title)
+    figure.canvas.manager.set_window_title(window_title)
+    start_plot()
+    main_thread.join()
 
 if __name__ == '__main__':
     main()
