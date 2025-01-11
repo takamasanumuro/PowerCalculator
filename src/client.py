@@ -27,7 +27,7 @@ class PowerStates(Enum):
 
 class StateManager(Protocol):
     state : PowerStates
-    def set_state(self, mode : PowerStates):
+    def set_state(self, state : PowerStates, current : float, cutoff_voltage : float, cutoff_current : float):
         pass
 
 #Bidirectional power supply that can read measurements and charge and discharge batteries itself via socket communication
@@ -36,18 +36,13 @@ class ITech6018Device(DataSource, StateManager):
         self.ip = ip
         self.port = port
         self.state = PowerStates.PASSIVE
-        self.charge_current = 0
-        self.charge_cutoff_current = 0
-        self.charge_cutoff_voltage = 0
-        self.discharge_voltage = 0
-        self.discharge_cutoff_voltage = 0
-        self.discharge_cutoff_current = 0
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.settimeout(3)
         try:
             self.socket.connect((self.ip, self.port))
             self.send_command('SYSTEM:REMOTE\n')
             self.send_command('*CLS\n')
+            self.send_command('FUNCTION:MODE FIXED\n')
         except socket.error as e:
             print(f"Error connecting to device: {e}")
             self.socket.close()
@@ -76,10 +71,10 @@ class ITech6018Device(DataSource, StateManager):
 
     def read_measurements(self) -> DataPointClass:
         try:
-            self.send_command("FETCH:CURRENT?\n")
+            self.send_command("MEASURE:CURRENT?\n")
             current = float(self.receive_response())
             
-            self.send_command("FETCH:VOLTAGE?\n")
+            self.send_command("MEASURE:VOLTAGE?\n")
             voltage = float(self.receive_response())
             
             power = voltage * current
@@ -89,45 +84,51 @@ class ITech6018Device(DataSource, StateManager):
             print(f"Error reading measurements: {e}")
             return DataPointClass(None, None, None, int(time.time() * 1000), False)
         
-    def set_state(self, state: PowerStates):
+    def set_state(self, state: PowerStates, current : float, cutoff_voltage : float, cutoff_current : float):
         try:
             if state == PowerStates.CHARGE:
+                self.send_command("FUNCTION:MODE FIXED\n")
+                time.sleep(2)
                 self.send_command("BATTERY:MODE CHARGE\n")
-                self._send_charge_rates()
+                self._send_charge_rates(charge_current = current, charge_cutoff_voltage = cutoff_voltage, charge_cutoff_current = cutoff_current)
+                self.send_command("FUNCTION:MODE BATTERY\n")
             elif state == PowerStates.DISCHARGE:
+                self.send_command("FUNCTION:MODE FIXED\n")
+                time.sleep(2)
                 self.send_command("BATTERY:MODE DISCHARGE\n")
-                self._send_discharge_rates()
+                self._send_discharge_rates(discharge_current = current, discharge_cutoff_voltage = cutoff_voltage, discharge_cutoff_current = cutoff_current)
+                self.send_command("FUNCTION:MODE BATTERY\n")
             else:
-                self.send_command("BATTERY:MODE FIXED\n")
+                self.send_command("FUNCTION:MODE FIXED\n")
+                self.send_command("OUTPUT 0\n")
             self.state = state
         except socket.error as e:
             print(f"Error setting mode: {e}")
-        
-    def set_charge_rates(self, charge_current: float, charge_cutoff_current: float, charge_cutoff_voltage: float):
-        self.charge_current = charge_current
-        self.charge_cutoff_current = charge_cutoff_current
-        self.charge_cutoff_voltage = charge_cutoff_voltage
 
-    def _send_charge_rates(self):
+    def set_output(self, output: bool):
         try:
-            self.send_command(f"BATTERY:CHARGE:CURRENT {self.charge_current}\n")
-            self.send_command(f"BATTERY:CHARGE:VOLTAGE {self.charge_cutoff_voltage + 1}\n")
-            self.send_command(f"BATTERY:SHUT:CURRENT {self.charge_cutoff_current}\n")
-            self.send_command(f"BATTERY:SHUT:VOLTAGE {self.charge_cutoff_voltage}\n")
+            if output:
+                self.send_command("OUTPUT 1\n")
+            else:
+                self.send_command("OUTPUT 0\n")
+        except socket.error as e:
+            print(f"Error setting output: {e}")
+
+    def _send_charge_rates(self, charge_current : float, charge_cutoff_voltage : float, charge_cutoff_current : float):
+        try:
+            self.send_command(f"BATTERY:CHARGE:CURRENT {charge_current}\n")
+            self.send_command(f"BATTERY:CHARGE:VOLTAGE {charge_cutoff_voltage}\n") #For charge, charge voltage must be the same as the cutoff voltage
+            self.send_command(f"BATTERY:SHUT:CURRENT {charge_cutoff_current - 0.150}\n")
+            self.send_command(f"BATTERY:SHUT:VOLTAGE {charge_cutoff_voltage + 0.150}\n") #For charge, shutdown voltage must be above the charge voltage
         except socket.error as e:
             print(f"Error setting charge rates: {e}")
 
-    def set_discharge_rates(self, discharge_current: float, discharge_cutoff_current: float, discharge_cutoff_voltage: float):
-        self.discharge_current = discharge_current
-        self.discharge_cutoff_current = discharge_cutoff_current
-        self.discharge_cutoff_voltage = discharge_cutoff_voltage
-
-    def _send_discharge_rates(self):
+    def _send_discharge_rates(self, discharge_current : float, discharge_cutoff_voltage : float, discharge_cutoff_current : float):
         try:
-            self.send_command(f"BATTERY:DISCHARGE:CURRENT {self.discharge_current}\n")
-            self.send_command(f"BATTERY:DISCHARGE:VOLTAGE {self.discharge_cutoff_voltage - 1}\n")
-            self.send_command(f"BATTERY:SHUT:CURRENT {self.discharge_cutoff_current}\n")
-            self.send_command(f"BATTERY:SHUT:VOLTAGE {self.discharge_cutoff_voltage}\n")
+            self.send_command(f"BATTERY:DISCHARGE:CURRENT {discharge_current}\n")
+            self.send_command(f"BATTERY:DISCHARGE:VOLTAGE {discharge_cutoff_voltage - 0.150}\n") #For discharge, discharge voltage must be below the shutdown voltage
+            self.send_command(f"BATTERY:SHUT:CURRENT {discharge_cutoff_current + 0.150}\n")
+            self.send_command(f"BATTERY:SHUT:VOLTAGE {discharge_cutoff_voltage - 0.150}\n") #For discharge, shutdown voltage is the same as the cutoff voltage
         except socket.error as e:
             print(f"Error setting discharge rates: {e}")
 
@@ -159,9 +160,66 @@ FUNCTION:MODE FIXED  # Execute STOP
 OUTPUT 0  # Turn off output
 '''
 
+def simple_charge(ip : str, port : int) -> None:
+    device = ITech6018Device(ip, port)
+    device.set_state(PowerStates.CHARGE, current=0.500, cutoff_voltage=14.4, cutoff_current=0.350)
+    data_point = device.read_measurements()
+    print(data_point)
 
-device = ITech6018Device('169.254.150.40', 30000)
-device.set_charge_rates(charge_current = 1.00, charge_cutoff_current = 0.040, charge_cutoff_voltage = 14.4)
-device.set_discharge_rates(discharge_current = -1.00, discharge_cutoff_current = -0.040, discharge_cutoff_voltage = 11.8)
-data_point = device.read_measurements()
-print(data_point)
+def simple_discharge(ip : str, port : int) -> None:
+    device = ITech6018Device(ip, port)
+    device.set_state(PowerStates.DISCHARGE, current= -0.500, cutoff_voltage = 12.5, cutoff_current = -0.400)
+    data_point = device.read_measurements()
+    print(data_point)
+
+#set_system_time('169.254.1500.40', 30000)
+def set_system_time(ip : str, port : int) -> None:
+    device = ITech6018Device(ip, port)
+    current_time = time.localtime()
+    command = f"system:time {current_time.tm_hour}, {current_time.tm_min}, {current_time.tm_sec}\n"
+    device.send_command(command)
+    command = f"system:date {current_time.tm_year}, {current_time.tm_mon}, {current_time.tm_mday}\n"
+    device.send_command(command)
+
+class ChargeController:
+
+    def __init__(self, data_source: DataSource, state_manager: StateManager):
+        self.data_source = data_source
+        self.state_manager = state_manager
+        self.sequence = []
+        self.current_step = 0
+
+    def add_state(self, state: PowerStates, current: float, cutoff_voltage: float, cutoff_current: float):
+        self.sequence.append((state, current, cutoff_voltage, cutoff_current))
+
+    def execute_sequence(self):
+        while self.current_step < len(self.sequence):
+            state, current, cutoff_voltage, cutoff_current = self.sequence[self.current_step]
+            self.state_manager.set_state(state, current, cutoff_voltage, cutoff_current)
+            print(f"Executing {state.value} with cutoff voltage {cutoff_voltage}V and current {current}A")
+            
+            while True:
+                data_point = self.data_source.read_measurements()
+                print(data_point)
+                if state == PowerStates.CHARGE and data_point.voltage >= cutoff_voltage and abs(data_point.current) <= cutoff_current:
+                    break
+                if state == PowerStates.DISCHARGE and data_point.voltage <= cutoff_voltage and data_point.current <= cutoff_current:
+                    break
+
+            self.current_step += 1
+        self.state_manager.set_state(PowerStates.PASSIVE, 0.0, 0.0, 0.0)
+        print("Sequence completed")
+
+# Example usage
+def run_charge_cycle(ip: str, port: int):
+    device = ITech6018Device(ip, port)
+    controller = ChargeController(device, device)
+    controller.add_state(PowerStates.CHARGE, current = 0.500, cutoff_voltage = 14.4, cutoff_current = 0.350)
+    controller.add_state(PowerStates.DISCHARGE, current = -1.000, cutoff_voltage = 12.5, cutoff_current = -0.400)
+    controller.execute_sequence()
+
+run_charge_cycle('169.254.150.40', 30000)
+
+#simple_charge('169.254.150.40', 30000)
+#simple_discharge('169.254.150.40', 30000)
+
