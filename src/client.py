@@ -6,13 +6,47 @@ from enum import Enum
 from dataclasses import dataclass
 import socket
 import time
+import logging
+import os
+from utils import generate_test_folder_name
+from analyzers import PowerAnalyzer
+
+'''
+48V Battery Charging Command: 
+SYSTEM:REMOTE  # Enter remote state
+BATTERY:MODE CHARGE  # Select charge mode
+BATTERY:CHARGE:VOLTAGE 50  # Set charge voltage to 50V
+BATTERY:CHARGE:CURRENT 20  # Set charge current to 20A
+BATTERY:SHUT:VOLTAGE 49  # Set charge cutoff voltage at 49V
+BATTERY:SHUT:CURRENT 0.1  # Set charge cutoff current at 0.1A
+BATTERY:SHUT:CAPACITY 50  # Set cutoff capacity at 50Ah
+BATTERY:SHUT:TIME 5000  # Set cutoff time at 5000 seconds
+FUNCTION:MODE BATTERY  # Execute RUN/RESET
+FUNCTION:MODE FIXED  # Execute STOP
+OUTPUT 0  # Turn off output
+
+SYSTEM:REMOTE  # Enter remote state
+BATTERY:MODE DISCHARGE  # Select discharge mode
+BATTERY:DISCHARGE:VOLTAGE 10  # Set discharge voltage to 10V
+BATTERY:DISCHARGE:CURRENT -5  # Set discharge current to -5A
+BATTERY:SHUT:VOLTAGE 36  # Set discharge cutoff voltage at 36V
+BATTERY:SHUT:CURRENT -0.1  # Set discharge cutoff current at -0.1A
+BATTERY:SHUT:CAPACITY -50  # Set cutoff capacity at -50Ah
+BATTERY:SHUT:TIME 5000  # Set cutoff time at 5000 seconds
+FUNCTION:MODE BATTERY  # Execute RUN/RESET
+FUNCTION:MODE FIXED  # Execute STOP
+OUTPUT 0  # Turn off output
+'''
+
 
 @dataclass
 class DataPointClass:
     voltage: Optional[float]
     current: Optional[float]
     power: Optional[float]
-    timestamp: int
+    ahour: Optional[float]
+    whour: Optional[float]
+    timestamp: float
     is_valid : bool
 
 #Let's define protocols for objects that can read measurements and control devices that can set the mode to charge or discharge
@@ -44,6 +78,9 @@ class ITech6018Device(DataSource, StateManager):
             self.send_command('*CLS\n')
             self.send_command('FUNCTION:MODE FIXED\n')
             self.send_command('SENSE:ACQUIRE:POINTS 10\n')
+            self.send_command('SENSE:WHOUR:RESET\n')
+            self.send_command('SENSE:AHOUR:RESET\n')
+
         except socket.error as e:
             print(f"Error connecting to device: {e}")
             self.socket.close()
@@ -77,25 +114,31 @@ class ITech6018Device(DataSource, StateManager):
             
             self.send_command("MEASURE:VOLTAGE?\n")
             voltage = float(self.receive_response())
+
+            self.send_command("MEASURE:AHOUR?\n")
+            ahour = float(self.receive_response())
+
+            self.send_command("MEASURE:WHOUR?\n")
+            whour = float(self.receive_response())
             
             power = voltage * current
-            timestamp = int(time.time() * 1000)
-            return DataPointClass(voltage, current, power, timestamp, True)
+            timestamp = time.time()
+            return DataPointClass(voltage, current, power, ahour, whour, timestamp, True)
         except (socket.error, ValueError) as e:
             print(f"Error reading measurements: {e}")
-            return DataPointClass(None, None, None, int(time.time() * 1000), False)
+            return DataPointClass(None, None, None, None, None, time.time(), False)
         
     def set_state(self, state: PowerStates, current : float, cutoff_voltage : float, cutoff_current : float):
         try:
             if state == PowerStates.CHARGE:
                 self.send_command("FUNCTION:MODE FIXED\n")
-                time.sleep(5)
+                time.sleep(2)
                 self.send_command("BATTERY:MODE CHARGE\n")
                 self._send_charge_rates(charge_current = current, charge_cutoff_voltage = cutoff_voltage, charge_cutoff_current = cutoff_current)
                 self.send_command("FUNCTION:MODE BATTERY\n")
             elif state == PowerStates.DISCHARGE:
                 self.send_command("FUNCTION:MODE FIXED\n")
-                time.sleep(5)
+                time.sleep(2)
                 self.send_command("BATTERY:MODE DISCHARGE\n")
                 self._send_discharge_rates(discharge_current = current, discharge_cutoff_voltage = cutoff_voltage, discharge_cutoff_current = cutoff_current)
                 self.send_command("FUNCTION:MODE BATTERY\n")
@@ -133,84 +176,63 @@ class ITech6018Device(DataSource, StateManager):
         except socket.error as e:
             print(f"Error setting discharge rates: {e}")
 
-
-'''
-48V Battery Charging Command: 
-SYSTEM:REMOTE  # Enter remote state
-BATTERY:MODE CHARGE  # Select charge mode
-BATTERY:CHARGE:VOLTAGE 50  # Set charge voltage to 50V
-BATTERY:CHARGE:CURRENT 20  # Set charge current to 20A
-BATTERY:SHUT:VOLTAGE 49  # Set charge cutoff voltage at 49V
-BATTERY:SHUT:CURRENT 0.1  # Set charge cutoff current at 0.1A
-BATTERY:SHUT:CAPACITY 50  # Set cutoff capacity at 50Ah
-BATTERY:SHUT:TIME 5000  # Set cutoff time at 5000 seconds
-FUNCTION:MODE BATTERY  # Execute RUN/RESET
-FUNCTION:MODE FIXED  # Execute STOP
-OUTPUT 0  # Turn off output
-
-SYSTEM:REMOTE  # Enter remote state
-BATTERY:MODE DISCHARGE  # Select discharge mode
-BATTERY:DISCHARGE:VOLTAGE 10  # Set discharge voltage to 10V
-BATTERY:DISCHARGE:CURRENT -5  # Set discharge current to -5A
-BATTERY:SHUT:VOLTAGE 36  # Set discharge cutoff voltage at 36V
-BATTERY:SHUT:CURRENT -0.1  # Set discharge cutoff current at -0.1A
-BATTERY:SHUT:CAPACITY -50  # Set cutoff capacity at -50Ah
-BATTERY:SHUT:TIME 5000  # Set cutoff time at 5000 seconds
-FUNCTION:MODE BATTERY  # Execute RUN/RESET
-FUNCTION:MODE FIXED  # Execute STOP
-OUTPUT 0  # Turn off output
-'''
-
-def simple_charge(ip : str, port : int) -> None:
-    device = ITech6018Device(ip, port)
-    device.set_state(PowerStates.CHARGE, current=0.500, cutoff_voltage=14.4, cutoff_current=0.350)
-    data_point = device.read_measurements()
-    print(data_point)
-
-def simple_discharge(ip : str, port : int) -> None:
-    device = ITech6018Device(ip, port)
-    device.set_state(PowerStates.DISCHARGE, current= -0.500, cutoff_voltage = 12.5, cutoff_current = -0.400)
-    data_point = device.read_measurements()
-    print(data_point)
-
-#set_system_time('169.254.1500.40', 30000)
-def set_system_time(ip : str, port : int) -> None:
-    device = ITech6018Device(ip, port)
-    current_time = time.localtime()
-    command = f"system:time {current_time.tm_hour}, {current_time.tm_min}, {current_time.tm_sec}\n"
-    device.send_command(command)
-    command = f"system:date {current_time.tm_year}, {current_time.tm_mon}, {current_time.tm_mday}\n"
-    device.send_command(command)
-
 class ChargeController:
 
-    def __init__(self, data_source: DataSource, state_manager: StateManager):
+    def __init__(self, data_source: DataSource, state_manager: StateManager, logger: logging.Logger, folder_name: str):
         self.data_source = data_source
         self.state_manager = state_manager
+        self.logger = logger
+        self.folder_name = folder_name
         self.sequence = []
         self.current_step = 0
+        self.power_analyzer = PowerAnalyzer()
 
     def add_state(self, state: PowerStates, current: float, cutoff_voltage: float, cutoff_current: float):
         self.sequence.append((state, current, cutoff_voltage, cutoff_current))
 
     def execute_sequence(self):
+        
+        log_directory = f'./logs/{self.folder_name}'
+        if os.path.exists(log_directory):
+            raise FileExistsError(f"Directory {self.folder_name} already exists")
+        os.makedirs(log_directory)
+       
         while self.current_step < len(self.sequence):
+
             state, current, cutoff_voltage, cutoff_current = self.sequence[self.current_step]
+
+            log_file = f'{log_directory}/{self.current_step}_{state.value}.log'
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setLevel(logging.DEBUG)
+            file_formatter = logging.Formatter('%(asctime)s - %(message)s')
+            self.logger.addHandler(file_handler)
+
             self.state_manager.set_state(state, current, cutoff_voltage, cutoff_current)
-            print(f"Executing {state.value} with cutoff voltage {cutoff_voltage}V and current {current}A")
+            self.logger.info(f"Executing {state.value} with cutoff voltage {cutoff_voltage}V and current {current}A")
             
             while True:
                 data_point = self.data_source.read_measurements()
-                print(data_point)
-                if state == PowerStates.CHARGE and data_point.voltage >= cutoff_voltage and abs(data_point.current) <= cutoff_current:
+                self.power_analyzer.add_entry(data_point.current, data_point.voltage, data_point.timestamp)
+                energy, capacity = self.power_analyzer.calculate_energy_capacity()
+                data_point.whour = energy
+                data_point.ahour = capacity
+
+                self.logger.debug(data_point)
+                if state == PowerStates.CHARGE and data_point.voltage >= cutoff_voltage and abs(data_point.current) <= abs(cutoff_current):
                     break
-                if state == PowerStates.DISCHARGE and data_point.voltage <= cutoff_voltage and data_point.current <= cutoff_current:
+                if state == PowerStates.DISCHARGE and data_point.voltage <= cutoff_voltage:
                     break
 
             self.current_step += 1
-        self.state_manager.set_state(PowerStates.PASSIVE, 0.0, 0.0, 0.0)
-        print("Sequence completed")
+            self.logger.removeHandler(file_handler)
+            file_handler.close()
+        self.state_manager.set_state(PowerStates.PASSIVE, None, None, None)
+        self.logger.info("Sequence complete")
 
+
+#Use SENSE:ACQUIRE:POINTS <NUMBER> to set the number of points to acquire
+#Use SENSE:ACQUIRE:TINTERVAL <TIME> to set the time interval between points
+#Minimum is 10 points
 def benchmark_response_time(ip: str, port: int):
     device = ITech6018Device(ip, port)
     time_list = []
@@ -222,17 +244,35 @@ def benchmark_response_time(ip: str, port: int):
     
     print(f"Average response time: {sum(time_list) / len(time_list):.4f} seconds")
 
-# Example usage
-def run_charge_cycle(ip: str, port: int):
+def set_system_time(ip : str, port : int) -> None:
     device = ITech6018Device(ip, port)
-    controller = ChargeController(device, device)
+    current_time = time.localtime()
+    command = f"SYSTEM:TIME {current_time.tm_hour}, {current_time.tm_min}, {current_time.tm_sec}\n"
+    device.send_command(command)
+    command = f"SYSTEM:DATE {current_time.tm_year}, {current_time.tm_mon}, {current_time.tm_mday}\n"
+    device.send_command(command)
+
+
+ip_address = '169.254.150.40'
+port = 30000
+folder_name = generate_test_folder_name()
+
+def main():
+    logger = logging.getLogger('ChargeController')
+    logger.setLevel(logging.DEBUG)
+    console_handler = logging.StreamHandler()   
+    console_handler.setLevel(logging.DEBUG)
+    console_formatter = logging.Formatter('%(levelname)s - %(message)s')
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+
+    device = ITech6018Device(ip_address, port)
+    controller = ChargeController(data_source= device, state_manager= device, logger= logger, folder_name= folder_name)
     controller.add_state(PowerStates.CHARGE, current = 0.500, cutoff_voltage = 14.4, cutoff_current = 0.350)
-    controller.add_state(PowerStates.DISCHARGE, current = -1.000, cutoff_voltage = 12.5, cutoff_current = -0.400)
+    controller.add_state(PowerStates.DISCHARGE, current = -1.000, cutoff_voltage = 12.5, cutoff_current = None)
     controller.add_state(PowerStates.CHARGE, current = 0.500, cutoff_voltage = 14.4, cutoff_current = 0.350)
     controller.execute_sequence()
 
-run_charge_cycle('169.254.150.40', 30000)
-#benchmark_response_time('169.254.150.40', 30000)
-#simple_charge('169.254.150.40', 30000)
-#simple_discharge('169.254.150.40', 30000)
 
+if __name__ == "__main__":
+    main()

@@ -90,3 +90,8 @@ def disable_reset_on_connect(serial: Serial):
     None
     """
     serial.dtr = 0
+
+def generate_test_folder_name():
+    import datetime
+    now = datetime.datetime.now()
+    return now.strftime('%H-%M-%S')
