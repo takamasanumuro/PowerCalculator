@@ -11,6 +11,72 @@ import os
 from utils import generate_test_folder_name
 from analyzers import PowerAnalyzer
 
+import threading
+import matplotlib.pyplot as plot
+from matplotlib.animation import FuncAnimation
+from queue import Queue, Empty
+
+#Thread safe queue to store data points
+data_queue = Queue()
+voltage_values =  []
+current_values =  []
+timestamps     =  []
+
+figure, axes = plot.subplots(2, 1, figsize = (10, 6))
+
+#Voltage plot
+axes[0].set_title("Voltage")
+axes[0].set_ylabel("Voltage (V)")
+axes[0].set_xlabel("Time (s)")
+axes[0].set_xlim(0, 10)
+axes[0].set_ylim(2, 4)
+axes[0].legend(loc = "upper right")
+line_voltage, = axes[0].plot([], [], label = "Voltage", color = "blue")
+
+#Current plot
+axes[1].set_title("Current")
+axes[1].set_xlabel("Time (s)")
+axes[1].set_ylabel("Current (A)")
+axes[1].set_xlim(0, 10)
+axes[1].set_ylim(-5, 5)
+axes[1].legend(loc = "upper right")
+line_current, = axes[1].plot([], [], label = "Current", color = "red")
+
+#Update function for the live plot
+def update_plot(frame):
+    global voltage_values, current_values, timestamps
+
+    try:
+        while True:
+            voltage, current, timestamp = data_queue.get_nowait()
+            voltage_values.append(voltage)
+            current_values.append(current)
+            timestamps.append(timestamp)
+    except Empty:
+        pass
+
+    if len(timestamps) > 0:
+        line_voltage.set_data(timestamps, voltage_values)
+        axes[0].set_xlim(timestamps[0], timestamps[-1])
+        axes[0].set_ylim(min(voltage_values) - 0.1, max(voltage_values) + 0.1)
+
+        line_current.set_data(timestamps, current_values)
+        axes[1].set_xlim(timestamps[0], timestamps[-1])
+        axes[1].set_ylim(min(current_values) - 0.1, max(current_values) + 0.1)
+
+        axes[0].relim()
+        axes[0].autoscale_view()
+        axes[1].relim()
+        axes[1].autoscale_view()
+
+    return line_voltage, line_current
+
+animation = FuncAnimation(figure, update_plot, interval = 100)
+
+def start_plot():
+    plot.tight_layout()
+    plot.show()
+
 '''
 48V Battery Charging Command: 
 SYSTEM:REMOTE  # Enter remote state
@@ -186,6 +252,10 @@ class ChargeController:
         self.sequence = []
         self.current_step = 0
         self.power_analyzer = PowerAnalyzer()
+        self.on_finish_callback = None
+
+    def register_finish_callback(self, callback):
+        self.on_finish_callback = callback
 
     def add_state(self, state: PowerStates, current: float, cutoff_voltage: float, cutoff_current: float):
         self.sequence.append((state, current, cutoff_voltage, cutoff_current))
@@ -216,6 +286,8 @@ class ChargeController:
                 energy, capacity = self.power_analyzer.calculate_energy_capacity()
                 data_point.whour = energy
                 data_point.ahour = capacity
+                elapsed_time = data_point.timestamp - self.power_analyzer.start_time
+                data_queue.put((data_point.voltage, data_point.current, elapsed_time))
 
                 self.logger.debug(data_point)
                 if state == PowerStates.CHARGE and data_point.voltage >= cutoff_voltage and abs(data_point.current) <= abs(cutoff_current):
@@ -228,6 +300,8 @@ class ChargeController:
             file_handler.close()
         self.state_manager.set_state(PowerStates.PASSIVE, None, None, None)
         self.logger.info("Sequence complete")
+        if self.on_finish_callback:
+            self.on_finish_callback()
 
 
 #Use SENSE:ACQUIRE:POINTS <NUMBER> to set the number of points to acquire
@@ -257,6 +331,17 @@ ip_address = '169.254.150.40'
 port = 30000
 folder_name = generate_test_folder_name()
 
+def on_finish_callback():
+    import requests
+    import chime
+    requests.post("https://ntfy.sh/alertas-bateria", data = "[ITECH]Ciclo de carga completado")
+    chime.theme("pokemon")
+    chime.success()
+    time.sleep(6)
+
+def data_loop(charge_controller: ChargeController):
+    charge_controller.execute_sequence()
+
 def main():
     logger = logging.getLogger('ChargeController')
     logger.setLevel(logging.DEBUG)
@@ -271,8 +356,17 @@ def main():
     controller.add_state(PowerStates.CHARGE, current = 0.500, cutoff_voltage = 14.4, cutoff_current = 0.350)
     controller.add_state(PowerStates.DISCHARGE, current = -1.000, cutoff_voltage = 12.5, cutoff_current = None)
     controller.add_state(PowerStates.CHARGE, current = 0.500, cutoff_voltage = 14.4, cutoff_current = 0.350)
-    controller.execute_sequence()
+    controller.register_finish_callback(on_finish_callback)
 
+    data_thread = threading.Thread(target = data_loop, args = (controller,))
+    data_thread.daemon = True
+    data_thread.start()
+
+    window_title = f"{folder_name}" if folder_name else "Live Plot"
+    figure.suptitle(window_title)
+    figure.canvas.manager.set_window_title(window_title)
+    start_plot()
+    data_thread.join()
 
 if __name__ == "__main__":
     main()
