@@ -279,6 +279,7 @@ class ChargeController:
 
             self.state_manager.set_state(state, current, cutoff_voltage, cutoff_current)
             self.logger.info(f"Executing {state.value} with cutoff voltage {cutoff_voltage}V and current {current}A")
+            self.power_analyzer.reset() #Reset for each step
             
             while True:
                 data_point = self.data_source.read_measurements()
@@ -329,7 +330,7 @@ def set_system_time(ip : str, port : int) -> None:
 
 ip_address = '169.254.150.40'
 port = 30000
-folder_name = generate_test_folder_name()
+folder_name = '11S2P'
 
 def on_finish_callback():
     import requests
@@ -353,9 +354,9 @@ def main():
 
     device = ITech6018Device(ip_address, port)
     controller = ChargeController(data_source= device, state_manager= device, logger= logger, folder_name= folder_name)
-    controller.add_state(PowerStates.CHARGE, current = 0.500, cutoff_voltage = 14.4, cutoff_current = 0.350)
-    controller.add_state(PowerStates.DISCHARGE, current = -1.000, cutoff_voltage = 12.5, cutoff_current = None)
-    controller.add_state(PowerStates.CHARGE, current = 0.500, cutoff_voltage = 14.4, cutoff_current = 0.350)
+    controller.add_state(PowerStates.CHARGE, current = 4.000, cutoff_voltage = 3.65, cutoff_current = 0.040)
+    controller.add_state(PowerStates.DISCHARGE, current = -3.200, cutoff_voltage = 2.00, cutoff_current = None)
+    controller.add_state(PowerStates.CHARGE, current = 4.000, cutoff_voltage = 3.65, cutoff_current = 0.040)
     controller.register_finish_callback(on_finish_callback)
 
     data_thread = threading.Thread(target = data_loop, args = (controller,))

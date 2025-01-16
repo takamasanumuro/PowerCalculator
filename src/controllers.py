@@ -55,8 +55,8 @@ class PowerSupplyController:
         self._ask_readings()
         lines = self.serial.readlines()
         voltage, current, power = self._parse_readings(lines)
-        timestamp_epoch_ms = int(time.time() * 1000)
-        return (voltage, current, power, timestamp_epoch_ms)
+        timestamp = time.time()
+        return (voltage, current, power, timestamp)
     
     def close(self):
         self.serial.close()
@@ -98,8 +98,8 @@ class YokogawaController:
             unit = format_unit(value, unit)
         except ValueError as e:
             return DataPoint(None, None, None)
-        timestamp_epoch_ms = int(time.time() * 1000)
-        return DataPoint(float(value), unit, timestamp_epoch_ms)
+        timestamp = time.time()
+        return DataPoint(float(value), unit, timestamp)
     
     def close(self):
         self.serial.close()

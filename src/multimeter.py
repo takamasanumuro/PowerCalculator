@@ -55,11 +55,6 @@ def update_plot(frame):
             voltage_values.append(voltage)
             current_values.append(current)
             timestamps.append(timestamp)
-
-            #number_datapoints = 100
-            #voltage_values = voltage_values[-number_datapoints:]
-            #current_values = current_values[-number_datapoints:]
-            #timestamps = timestamps[-number_datapoints:]
     except Empty:
         pass
 
@@ -85,8 +80,21 @@ def start_plot():
     plot.tight_layout()
     plot.show()
 
+def handle_exception(exception):
+    #send the error to the logger
+    file = open("error_log.txt", "a")
+    file.write(f"{exception}\n")
+    file.close()
+
+    #send to ntfy.sh/alertas-bateria-erros
+    chime.theme('pokemon')
+    chime.error()
+    requests.post("https://ntfy.sh/alertas-bateria", data = "Error {exception}")
+    time.sleep(4)
+
+
 def main_loop(args, multimeters, relay_controller, power_analyzer, logger, charge_controller):
-    start_time_ms = time.time() * 1000
+    start_time = time.time()
     try:
         while True:
             data_points: list[DataPoint] = [DataPoint(None, None, None)] * len(multimeters)
@@ -106,7 +114,7 @@ def main_loop(args, multimeters, relay_controller, power_analyzer, logger, charg
             is_power_available, voltage, current = check_if_power_available(data_points)
             timestamp = get_timestamp(data_points)
             if is_power_available:
-                relative_timestamp_seconds = (timestamp - start_time_ms) / 1000
+                relative_timestamp_seconds = timestamp - start_time
                 data_queue.put((voltage, current, relative_timestamp_seconds))
                 power_analyzer.add_entry(voltage, current, timestamp)
                 charge_controller.watch_values(voltage, current, timestamp)
@@ -119,7 +127,7 @@ def main_loop(args, multimeters, relay_controller, power_analyzer, logger, charg
                 folder_str = f"\t{args.folder}" if args.folder else ""
                 output_message_with_folder = terminal_output_message + folder_str
                 output_message_with_mode = f"{output_message_with_folder}\t{charge_controller.get_mode()}"
-                output_message_with_mode = f"{output_message_with_mode}\t{time.time() - start_time_ms / 1000:.2f}s"
+                output_message_with_mode = f"{output_message_with_mode}\t{time.time() - start_time:.2f}s"
                 stamped_output_message = append_timestamp(timestamp, output_message_with_mode)
                 print_and_log(logger, stamped_output_message)
 
@@ -127,6 +135,9 @@ def main_loop(args, multimeters, relay_controller, power_analyzer, logger, charg
 
     except (KeyboardInterrupt, SystemExit): 
         print(Fore.RED + "Exiting..." + Style.RESET_ALL)
+    except Exception as exception:
+        print(Fore.RED + f"Error: {exception}" + Style.RESET_ALL)
+        handle_exception(exception)
     finally:
         charge_controller.set_mode("monitor")
 
@@ -141,6 +152,7 @@ def main():
     parser.add_argument("--charge_cutoff_voltage", default = '3.65', help = "Specify the charge cutoff voltage")
     parser.add_argument("--charge_cutoff_current", default = '0.600', help = "Specify the charge cutoff current")
     parser.add_argument("--discharge_cutoff_voltage", default = '2.50', help = "Specify the discharge cutoff voltage")
+    parser.add_argument("--runner_name", default = 'multimeter.py', help = "Specify the name of the runner script")
     args = parser.parse_args()
 
     multimeter_port_names : list[str] = args.multimeter_ports
@@ -158,6 +170,7 @@ def main():
     print(f"Charge Cutoff Voltage = {args.charge_cutoff_voltage}")
     print(f"Charge Cutoff Current = {args.charge_cutoff_current}")
     print(f"Discharge Cutoff Voltage = {args.discharge_cutoff_voltage}")
+    print(f"Runner Name = {args.runner_name}")
     print("-"*len(program_args_intro))
     print('\n' * 2)
 
@@ -197,8 +210,8 @@ def main():
     main_thread.daemon = True
     main_thread.start()
 
-    window_title : str = f"{args.folder}" if args.folder else "Live Plot"
-    figure.suptitle(window_title)
+    window_title = args.runner_name
+    figure.suptitle(args.folder)
     figure.canvas.manager.set_window_title(window_title)
     start_plot()
     main_thread.join()

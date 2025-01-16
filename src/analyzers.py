@@ -9,9 +9,12 @@ from colorama import Fore, Style, init
 class PowerAnalyzer:
     def __init__(self):
         self.entries = []
+        self.start_time : float = None
     
     def add_entry(self, voltage, current, timestamp):
         self.entries.append((voltage, current, timestamp))
+        if not self.start_time:
+            self.start_time = timestamp
 
     def reset(self):
         self.entries = []
@@ -28,9 +31,9 @@ class PowerAnalyzer:
             current_voltage, current_current, current_time = self.entries[i]
 
             # Calculate the time difference in hours
-            milliseconds_to_hours = 3600000
+            seconds_to_hours = 3600
             delta_time = current_time - previous_time
-            delta_time_hours = (delta_time) / milliseconds_to_hours
+            delta_time_hours = (delta_time) / seconds_to_hours
             
             # Calculate average voltage and current
             average_voltage = (previous_voltage + current_voltage) / 2
@@ -41,6 +44,36 @@ class PowerAnalyzer:
             total_energy += energy
         
         return total_energy
+    
+    def calculate_energy_capacity(self) -> tuple[float, float]:
+        if len(self.entries) < 2:
+            return 0.0, 0.0
+        
+        total_energy = 0.0
+        total_capacity = 0.0
+
+        for i in range(1, len(self.entries)):
+            previous_voltage, previous_current, previous_time = self.entries[i - 1]
+            current_voltage, current_current, current_time = self.entries[i]
+
+            # Calculate the time difference in hours
+            seconds_to_hours = 3600
+            delta_time = current_time - previous_time
+            delta_time_hours = (delta_time) / seconds_to_hours
+            
+            # Calculate average voltage and current
+            average_voltage = (previous_voltage + current_voltage) / 2
+            average_current = (previous_current + current_current) / 2
+
+            # Calculate energy in Wh
+            energy = average_voltage * average_current * delta_time_hours
+            total_energy += energy
+
+            # Calculate capacity in Ah
+            capacity = average_current * delta_time_hours
+            total_capacity += capacity
+        
+        return total_energy, total_capacity
 
 class DataLogger:
     def __init__(self, log_directories : list[str], root_folder : str = None):
@@ -103,5 +136,5 @@ def print_and_log(logger : DataLogger, message : str):
     logger.save_data("terminal", message)
 
 def append_timestamp(timestamp, data):
-    readable_timestamp = time.strftime("%H:%M:%S", time.localtime(float(timestamp / 1000)))
+    readable_timestamp = time.strftime("%H:%M:%S", time.localtime(timestamp))
     return f"{data}\t{timestamp}\t{readable_timestamp}\n"
