@@ -80,16 +80,19 @@ def start_plot():
     plot.tight_layout()
     plot.show()
 
-def handle_exception(exception):
+def handle_exception(exception : Exception, runner_name : str):
     #send the error to the logger
+    #readable timestamp
+    timestamp = time.strftime("%m-%d %H:%M:%S")
+    message = f"{runner_name}-{timestamp}-{exception}\n"
     file = open("error_log.txt", "a")
-    file.write(f"{exception}\n")
+    file.write(message)
     file.close()
 
     #send to ntfy.sh/alertas-bateria-erros
     chime.theme('pokemon')
     chime.error()
-    requests.post("https://ntfy.sh/alertas-bateria", data = "Error {exception}")
+    requests.post("https://ntfy.sh/alertas-bateria", data = "Error {message}")
     time.sleep(4)
 
 
