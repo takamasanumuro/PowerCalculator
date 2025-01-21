@@ -1,9 +1,8 @@
 #socket client communication
 
-from typing import Optional
-from typing import Protocol
+from typing import Optional, Protocol, Union, List, Type
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, fields
 import socket
 import time
 import logging
@@ -15,6 +14,7 @@ import threading
 import matplotlib.pyplot as plot
 from matplotlib.animation import FuncAnimation
 from queue import Queue, Empty
+import csv
 
 #Thread safe queue to store data points
 data_queue = Queue()
@@ -114,6 +114,24 @@ class DataPointClass:
     whour: Optional[float]
     timestamp: float
     is_valid : bool
+
+def serialize_to_csv(data_points : Union[object, List[object]],
+                     data_point_type : Type,
+                     file_path : str):
+    if isinstance(data_points, data_point_type):
+        data_points = [data_points]
+    elif not isinstance(data_points, list):
+        raise ValueError(f"Expected {data_point_type}, got {type(data_points)}")
+    
+    file_exists = os.path.isfile(file_path)
+
+    with open(file_path, mode = 'a' if file_exists else 'w', newline = '') as file:
+        writer = csv.DictWriter(file, fieldnames =  [field.name for field in fields(data_point_type)], delimiter = ';')
+
+        if not file_exists:
+            writer.writeheader()
+        for data_point in data_points:
+            writer.writerow(asdict(data_point))
 
 #Let's define protocols for objects that can read measurements and control devices that can set the mode to charge or discharge
 class DataSource(Protocol):
@@ -266,16 +284,14 @@ class ChargeController:
         if os.path.exists(log_directory):
             raise FileExistsError(f"Directory {self.folder_name} already exists")
         os.makedirs(log_directory)
+
+        all_sequences_log_file = f'{log_directory}/all_sequences.log'
        
         while self.current_step < len(self.sequence):
 
             state, current, cutoff_voltage, cutoff_current = self.sequence[self.current_step]
 
-            log_file = f'{log_directory}/{self.current_step}_{state.value}.log'
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setLevel(logging.DEBUG)
-            file_formatter = logging.Formatter('%(asctime)s - %(message)s')
-            self.logger.addHandler(file_handler)
+            current_sequence_log_file = f'{log_directory}/{self.current_step}_{state.value}.log'
 
             self.state_manager.set_state(state, current, cutoff_voltage, cutoff_current)
             self.logger.info(f"Executing {state.value} with cutoff voltage {cutoff_voltage}V and current {current}A")
@@ -290,15 +306,15 @@ class ChargeController:
                 elapsed_time = data_point.timestamp - self.power_analyzer.start_time
                 data_queue.put((data_point.voltage, data_point.current, elapsed_time))
 
-                self.logger.debug(data_point)
+                #log data_point as CSV
+                serialize_to_csv(data_point, DataPointClass, current_sequence_log_file)
+                serialize_to_csv(data_point, DataPointClass, all_sequences_log_file)
                 if state == PowerStates.CHARGE and data_point.voltage >= cutoff_voltage and abs(data_point.current) <= abs(cutoff_current):
                     break
                 if state == PowerStates.DISCHARGE and data_point.voltage <= cutoff_voltage:
                     break
 
             self.current_step += 1
-            self.logger.removeHandler(file_handler)
-            file_handler.close()
         self.state_manager.set_state(PowerStates.PASSIVE, None, None, None)
         self.logger.info("Sequence complete")
         if self.on_finish_callback:
@@ -330,7 +346,7 @@ def set_system_time(ip : str, port : int) -> None:
 
 ip_address = '169.254.150.40'
 port = 30000
-folder_name = '11S2P'
+folder_name = '5S3P'
 
 def on_finish_callback():
     import requests
@@ -365,7 +381,7 @@ def main():
 
     window_title = f"{folder_name}" if folder_name else "Live Plot"
     figure.suptitle(window_title)
-    figure.canvas.manager.set_window_title(window_title)
+    figure.canvas.manager.set_window_title("ITECH")
     start_plot()
     data_thread.join()
 
