@@ -346,7 +346,7 @@ def set_system_time(ip : str, port : int) -> None:
 
 ip_address = '169.254.150.40'
 port = 30000
-folder_name = '5S3P'
+folder_name = '6S5P'
 
 def on_finish_callback():
     import requests
