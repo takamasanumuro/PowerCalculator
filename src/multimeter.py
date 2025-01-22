@@ -81,10 +81,8 @@ def start_plot():
     plot.show()
 
 def handle_exception(exception : Exception, runner_name : str):
-    #send the error to the logger
-    #readable timestamp
     timestamp = time.strftime("%m-%d %H:%M:%S")
-    message = f"{runner_name}-{timestamp}-{exception}\n"
+    message = f"[{timestamp}]\t[{runner_name}]\t{exception}\n"
     file = open("error_log.txt", "a")
     file.write(message)
     file.close()
@@ -92,7 +90,7 @@ def handle_exception(exception : Exception, runner_name : str):
     #send to ntfy.sh/alertas-bateria-erros
     chime.theme('pokemon')
     chime.error()
-    requests.post("https://ntfy.sh/alertas-bateria", data = "Error {message}")
+    requests.post("https://ntfy.sh/alertas-bateria", data = f"Error:{message}")
     time.sleep(4)
 
 
@@ -140,7 +138,7 @@ def main_loop(args, multimeters, relay_controller, power_analyzer, logger, charg
         print(Fore.RED + "Exiting..." + Style.RESET_ALL)
     except Exception as exception:
         print(Fore.RED + f"Error: {exception}" + Style.RESET_ALL)
-        handle_exception(exception)
+        handle_exception(exception, args.runner_name)
     finally:
         charge_controller.set_mode("monitor")
 
