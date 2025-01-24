@@ -9,71 +9,47 @@ from colorama import Fore, Style, init
 class PowerAnalyzer:
     def __init__(self):
         self.entries = []
-        self.start_time : float = None
+        self.start_time: float = None
+        self.total_energy: float = 0.0  # Running total of energy
+        self.total_capacity: float = 0.0  # Running total of capacity
     
     def add_entry(self, voltage, current, timestamp):
         self.entries.append((voltage, current, timestamp))
         if not self.start_time:
             self.start_time = timestamp
 
+        # Calculate energy and capacity for the new entry
+        if len(self.entries) > 1:
+            previous_voltage, previous_current, previous_time = self.entries[-2]
+            current_voltage, current_current, current_time = self.entries[-1]
+
+            # Calculate the time difference in hours
+            seconds_to_hours = 3600
+            delta_time = current_time - previous_time
+            delta_time_hours = delta_time / seconds_to_hours
+
+            # Calculate average voltage and current
+            average_voltage = (previous_voltage + current_voltage) / 2
+            average_current = (previous_current + current_current) / 2
+
+            # Calculate energy in Wh and capacity in Ah
+            energy = average_voltage * average_current * delta_time_hours
+            capacity = average_current * delta_time_hours
+
+            # Update running totals
+            self.total_energy += energy
+            self.total_capacity += capacity
+
     def reset(self):
         self.entries = []
+        self.total_energy = 0.0
+        self.total_capacity = 0.0
     
     def calculate_energy(self) -> float:
-        
-        if len(self.entries) < 2:
-            return 0.0
-        
-        total_energy = 0.0
-
-        for i in range(1, len(self.entries)):
-            previous_voltage, previous_current, previous_time = self.entries[i - 1]
-            current_voltage, current_current, current_time = self.entries[i]
-
-            # Calculate the time difference in hours
-            seconds_to_hours = 3600
-            delta_time = current_time - previous_time
-            delta_time_hours = (delta_time) / seconds_to_hours
-            
-            # Calculate average voltage and current
-            average_voltage = (previous_voltage + current_voltage) / 2
-            average_current = (previous_current + current_current) / 2
-
-            # Calculate energy in Wh
-            energy = average_voltage * average_current * delta_time_hours
-            total_energy += energy
-        
-        return total_energy
+        return self.total_energy
     
     def calculate_energy_capacity(self) -> tuple[float, float]:
-        if len(self.entries) < 2:
-            return 0.0, 0.0
-        
-        total_energy = 0.0
-        total_capacity = 0.0
-
-        for i in range(1, len(self.entries)):
-            previous_voltage, previous_current, previous_time = self.entries[i - 1]
-            current_voltage, current_current, current_time = self.entries[i]
-
-            # Calculate the time difference in hours
-            seconds_to_hours = 3600
-            delta_time = current_time - previous_time
-            delta_time_hours = (delta_time) / seconds_to_hours
-            
-            # Calculate average voltage and current
-            average_voltage = (previous_voltage + current_voltage) / 2
-            average_current = (previous_current + current_current) / 2
-
-            # Calculate energy in Wh
-            energy = average_voltage * average_current * delta_time_hours
-            total_energy += energy
-
-            # Calculate capacity in Ah
-            capacity = average_current * delta_time_hours
-            total_capacity += capacity
-        
-        return total_energy, total_capacity
+        return self.total_energy, self.total_capacity
 
 class DataLogger:
     def __init__(self, log_directories : list[str], root_folder : str = None):
