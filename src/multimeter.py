@@ -16,6 +16,7 @@ from queue import Queue, Empty
 from controllers import *
 from analyzers import *
 from threads import *
+import sounds
 
 #Thread safe queue
 data_queue = Queue()
@@ -82,7 +83,7 @@ def start_plot():
 
 def handle_exception(exception : Exception, runner_name : str):
     timestamp = time.strftime("%m-%d %H:%M:%S")
-    message = f"[{timestamp}]\t[{runner_name}]\t{exception}\n"
+    message = f"[{timestamp}]\t[{runner_name}]\tType: {type(exception).__name__}\tMessage: {exception}\n"
     file = open("error_log.txt", "a")
     file.write(message)
     file.close()
