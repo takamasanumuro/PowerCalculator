@@ -156,6 +156,7 @@ class ITech6018Device(DataSource, StateManager):
         self.state = PowerStates.PASSIVE
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.settimeout(3)
+        self.start_time = time.time()
         try:
             self.socket.connect((self.ip, self.port))
             self.send_command('SYSTEM:REMOTE\n')
@@ -206,11 +207,11 @@ class ITech6018Device(DataSource, StateManager):
             whour = float(self.receive_response())
             
             power = voltage * current
-            timestamp = time.time()
-            return DataPointClass(voltage, current, power, ahour, whour, timestamp, True)
+            timestamp = time.time() - self.start_time
+            return DataPointClass(voltage, current, power, ahour, whour, time.time() - self.start_time, True)
         except (socket.error, ValueError) as e:
             print(f"Error reading measurements: {e}")
-            return DataPointClass(None, None, None, None, None, time.time(), False)
+            return DataPointClass(None, None, None, None, None, self.start_time - time.time(), False)
         
     def set_state(self, state: PowerStates, current : float, cutoff_voltage : float, cutoff_current : float):
         try:
@@ -346,7 +347,7 @@ def set_system_time(ip : str, port : int) -> None:
 
 ip_address = '169.254.150.40'
 port = 30000
-folder_name = '6S5P'
+folder_name = '13S6P' ##Todas as 1P e 2P já foram testadas##
 
 def on_finish_callback():
     import requests
@@ -359,6 +360,31 @@ def on_finish_callback():
 def data_loop(charge_controller: ChargeController):
     charge_controller.execute_sequence()
 
+def add_lifepo4_sequence(charge_controller: ChargeController):
+    charge_controller.add_state(PowerStates.CHARGE, current = 4.000, cutoff_voltage = 3.65, cutoff_current = 0.040)
+    charge_controller.add_state(PowerStates.DISCHARGE, current = -3.200, cutoff_voltage = 2.00, cutoff_current = None)
+    charge_controller.add_state(PowerStates.CHARGE, current = 4.000, cutoff_voltage = 3.65, cutoff_current = 0.040)
+
+def add_liion_sequence(charge_controller: ChargeController):
+    charge_controller.add_state(PowerStates.CHARGE, current = 1.000, cutoff_voltage = 4.20, cutoff_current = 0.500)
+    charge_controller.add_state(PowerStates.DISCHARGE, current = -1.000, cutoff_voltage = 3.00, cutoff_current = None)
+    charge_controller.add_state(PowerStates.CHARGE, current = 1.000, cutoff_voltage = 4.20, cutoff_current = 0.500)
+
+def add_naion_sequence(charge_controller : ChargeController):
+
+
+    charge_controller.add_state(PowerStates.CHARGE, current = 1.300, cutoff_voltage = 4.12, cutoff_current = 0.500)
+    charge_controller.add_state(PowerStates.DISCHARGE, current = (-1.3 * 16), cutoff_voltage = 1.55, cutoff_current = None) 
+
+    charge_controller.add_state(PowerStates.CHARGE, current = 1.300, cutoff_voltage = 4.12, cutoff_current = 0.500)
+    charge_controller.add_state(PowerStates.DISCHARGE, current = (-1.3 * 18), cutoff_voltage = 1.55, cutoff_current = None) 
+
+    charge_controller.add_state(PowerStates.CHARGE, current = 1.300, cutoff_voltage = 4.12, cutoff_current = 0.500)
+    charge_controller.add_state(PowerStates.DISCHARGE, current = (-1.3 * 20), cutoff_voltage = 1.55, cutoff_current = None) 
+
+    charge_controller.add_state(PowerStates.CHARGE, current = 1.300, cutoff_voltage = 4.12, cutoff_current = 0.500) #final recharge
+    
+
 def main():
     logger = logging.getLogger('ChargeController')
     logger.setLevel(logging.DEBUG)
@@ -370,9 +396,7 @@ def main():
 
     device = ITech6018Device(ip_address, port)
     controller = ChargeController(data_source= device, state_manager= device, logger= logger, folder_name= folder_name)
-    controller.add_state(PowerStates.CHARGE, current = 4.000, cutoff_voltage = 3.65, cutoff_current = 0.040)
-    controller.add_state(PowerStates.DISCHARGE, current = -3.200, cutoff_voltage = 2.00, cutoff_current = None)
-    controller.add_state(PowerStates.CHARGE, current = 4.000, cutoff_voltage = 3.65, cutoff_current = 0.040)
+    add_lifepo4_sequence(controller)
     controller.register_finish_callback(on_finish_callback)
 
     data_thread = threading.Thread(target = data_loop, args = (controller,))

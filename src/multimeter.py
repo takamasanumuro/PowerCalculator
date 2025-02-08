@@ -95,8 +95,9 @@ def handle_exception(exception : Exception, runner_name : str):
     time.sleep(4)
 
 
-def main_loop(args, multimeters, relay_controller, power_analyzer, logger, charge_controller):
+def main_loop(args, multimeters, relay_controller : RelayController, power_analyzer : PowerAnalyzer, logger : DataLogger, charge_controller : ChargeController):
     start_time = time.time()
+    charge_controller.set_mode("cycle")
     try:
         while True:
             data_points: list[DataPoint] = [DataPoint(None, None, None)] * len(multimeters)

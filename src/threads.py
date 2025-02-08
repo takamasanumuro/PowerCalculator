@@ -100,6 +100,8 @@ def handle_keyboard_input(charge_controller : ChargeController):
 def keyboard_input_callback(charge_controller : ChargeController, command : str):
     match command:
         case 'K':
+            if (charge_controller.mode == "cycle"):
+                return
             charge_controller.set_mode("cycle")
             print("[CONTROLLER]Mode set to cycle")
             previous_theme = chime.theme()
