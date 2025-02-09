@@ -151,11 +151,7 @@ class ChargeController():
         self.max_charge_voltage = None
         self.charge_cutoff_current = None
         self.discharge_cutoff_voltage = None
-        self.transition_map = {
-            "precharge": self._handle_charge,
-            "discharge": self._handle_discharge,
-            "recharge": self._handle_recharge
-        }
+        self.recent_measurements = []
 
         self.logger.add_save_paths(["monitor"])
         self.logger.add_save_paths(self.CYCLE_STATES)
@@ -176,27 +172,6 @@ class ChargeController():
         
         print(f"CONTROLLER: Transitioning to {self.cycle_state}")
 
-
-    def _handle_charge(self, voltage, current):
-        if voltage >= self.max_charge_voltage and abs(current) <= self.charge_cutoff_current:
-            self._next_cycle_state()
-
-    def _handle_discharge(self, voltage, current):
-        if voltage <= self.discharge_cutoff_voltage:
-            self._next_cycle_state()
-
-    def _handle_recharge(self, voltage, current):
-        if voltage >= self.max_charge_voltage and abs(current) <= self.charge_cutoff_current:
-            #Cycle completed
-            self.cycle_completed = True
-            self.set_mode("monitor")
-            print("CONTROLLER: Cycle completed\nCheck the logs for more information")
-            requests.post("https://ntfy.sh/alertas-bateria", data = "Ciclo de carga completado")
-            chime.theme("pokemon")
-            chime.success()
-            time.sleep(6)
-            exit()
-
     def set_charge_threshold(self, max_charge_voltage : float, charge_cutoff_current : float):
         self.max_charge_voltage = max_charge_voltage
         self.charge_cutoff_current = charge_cutoff_current
@@ -208,16 +183,41 @@ class ChargeController():
         assert voltage is not None, "CHARGE CONTROLLER: Voltage is None"
         assert current is not None, "CHARGE CONTROLLER: Current is None"
 
+        self.recent_measurements.append((voltage, current, timestamp))
+        self.recent_measurements = [m for m in self.recent_measurements if timestamp - m[2] <= 1.0]
+
+        if len(self.recent_measurements) >= 3 and self.mode == "cycle":
+            self.evaluate_cycle_state()
+
         power = voltage * current
         accumulated_energy = self.power_analyzer.calculate_energy()
-        
-        if self.mode == "cycle":
-            self.transition_map[self.cycle_state](voltage, current)
 
         directory = self.mode if self.mode != "cycle" else self.cycle_state
         self._log_measurements(directory, voltage, current, power, accumulated_energy, timestamp)
 
-              
+    def evaluate_cycle_state(self):
+        # Logic to evaluate whether to proceed to the next cycle state
+        # based on the recent measurements
+        voltages = [m[0] for m in self.recent_measurements]
+        currents = [m[1] for m in self.recent_measurements]
+
+        if self.cycle_state == "precharge":
+            if all(v >= self.max_charge_voltage for v in voltages) and all(abs(c) <= self.charge_cutoff_current for c in currents):
+                self._next_cycle_state()
+        elif self.cycle_state == "discharge":
+            if all(v <= self.discharge_cutoff_voltage for v in voltages):
+                self._next_cycle_state()
+        elif self.cycle_state == "recharge":
+            if all(v >= self.max_charge_voltage for v in voltages) and all(abs(c) <= self.charge_cutoff_current for c in currents):
+                self.cycle_completed = True
+                self.set_mode("monitor")
+                print("CONTROLLER: Cycle completed\nCheck the logs for more information")
+                requests.post("https://ntfy.sh/alertas-bateria", data = "Ciclo de carga completado")
+                chime.theme("pokemon")
+                chime.success()
+                time.sleep(6)
+                exit()
+
     def _log_measurements(self, directory, voltage, current, power, energy, timestamp):
         #convert epoch time to human readable format
         data = f"{voltage:.2f}V {current:.3f}A {energy:.4f}Wh"
