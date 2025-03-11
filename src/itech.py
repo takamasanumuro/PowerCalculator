@@ -115,6 +115,14 @@ class DataPointClass:
     timestamp: float
     is_valid : bool
 
+def round_values(data_point_dict: dict, decimal_places: int) -> dict:
+    rounded_dict = {}
+    for key, value in data_point_dict.items():
+        if isinstance(value, float):
+            rounded_dict[key] = round(value, decimal_places)
+        else:
+            rounded_dict[key] = value
+
 def serialize_to_csv(data_points : Union[object, List[object]],
                      data_point_type : Type,
                      file_path : str):
@@ -131,7 +139,9 @@ def serialize_to_csv(data_points : Union[object, List[object]],
         if not file_exists:
             writer.writeheader()
         for data_point in data_points:
-            writer.writerow(asdict(data_point))
+            data_point_dict = asdict(data_point)
+            #rounded_dict = round_values(data_point_dict, 2)
+            writer.writerow(data_point_dict)
 
 #Let's define protocols for objects that can read measurements and control devices that can set the mode to charge or discharge
 class DataSource(Protocol):
@@ -200,11 +210,8 @@ class ITech6018Device(DataSource, StateManager):
             self.send_command("MEASURE:VOLTAGE?\n")
             voltage = float(self.receive_response())
 
-            self.send_command("MEASURE:AHOUR?\n")
-            ahour = float(self.receive_response())
-
-            self.send_command("MEASURE:WHOUR?\n")
-            whour = float(self.receive_response())
+            ahour = 0.0 # Let the program calculate this
+            whour = 0.0 # Let the program calculate this
             
             power = voltage * current
             timestamp = time.time() - self.start_time
@@ -366,9 +373,15 @@ def add_lifepo4_sequence(charge_controller: ChargeController):
     charge_controller.add_state(PowerStates.CHARGE, current = 4.000, cutoff_voltage = 3.65, cutoff_current = 0.040)
 
 def add_liion_sequence(charge_controller: ChargeController):
-    charge_controller.add_state(PowerStates.CHARGE, current = 1.000, cutoff_voltage = 4.20, cutoff_current = 0.500)
-    charge_controller.add_state(PowerStates.DISCHARGE, current = -1.000, cutoff_voltage = 3.00, cutoff_current = None)
-    charge_controller.add_state(PowerStates.CHARGE, current = 1.000, cutoff_voltage = 4.20, cutoff_current = 0.500)
+    charge_controller.add_state(PowerStates.CHARGE, current = 1.300, cutoff_voltage = 4.20, cutoff_current = 0.500)
+    charge_controller.add_state(PowerStates.DISCHARGE, current = -1.300, cutoff_voltage = 3.00, cutoff_current = None)
+    charge_controller.add_state(PowerStates.CHARGE, current = 1.300, cutoff_voltage = 4.20, cutoff_current = 0.500)
+
+def add_lifepo4_pack_sequence(charge_controller: ChargeController):
+    charge_controller.add_state(PowerStates.CHARGE, current = 30.000, cutoff_voltage = 58.2, cutoff_current = 1.000)
+    charge_controller.add_state(PowerStates.DISCHARGE, current = -30.000, cutoff_voltage = 40.00, cutoff_current = None)
+    charge_controller.add_state(PowerStates.CHARGE, current = 30.000, cutoff_voltage = 58.2, cutoff_current = 0.040)
+
 
 def add_naion_sequence(charge_controller : ChargeController):
 
